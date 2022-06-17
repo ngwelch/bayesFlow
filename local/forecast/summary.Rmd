@@ -1,0 +1,1284 @@
+---
+pagetitle: "Forecast Summary"
+author: "Nathan Welch"
+date: "26 February 2022"
+output: 
+  bookdown::html_document2:
+    toc: no
+    number_sections: no
+    fig_caption: yes
+    fig_width: 6
+    fig_height: 3.25
+header-includes: 
+- \usepackage{graphicx}
+- \usepackage{float}
+- \usepackage{amsmath}
+- \usepackage{dsfont}
+- \usepackage{bbm}
+- \usepackage{natbib}
+- \usepackage{rotating}
+- \usepackage{pdfpages}
+- \usepackage{fullpage}
+- \usepackage{pdflscape}
+- \usepackage{enumerate}
+- \usepackage{subfig}
+- \usepackage{pdfpages}
+- \usepackage{pdflscape}
+- \usepackage[]{algorithm2e}
+- \usepackage{xcolor}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=TRUE, autodep=TRUE,
+                      cache=FALSE, cache.path="./cache/", 
+                      fig.path="./figure/", dev="png",
+                      fig.align='center', fig.pos='H', comment=NULL)
+```
+
+```{r}
+library(kableExtra)
+library(data.table)
+library(magrittr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(cowplot)
+theme_set(theme_cowplot())
+library(scales)
+
+forecastVersion = "v15"
+```
+
+# Data Model
+
+```{r}
+# Total Population
+data("pop", package="wpp2019")
+data("popproj", package="wpp2019")
+
+wppHistoricPop = as.data.table(pop)
+wppProjectedPop = as.data.table(popproj)
+unlargest200 = fread("../data/200isoRegionCodes.csv")[order(iso)]
+
+popdt = 
+  merge(wppHistoricPop, wppProjectedPop, by=c("name", "country_code")) %>%
+  merge(unlargest200, by="country_code")  %>%
+  setnames(old="name", new="country_name") %>%
+  setcolorder(c("area_code", "reg_code", "country_code", 
+                "area_name", "reg_name", "country_name", "iso"))
+
+popNames = c("iso", as.character(seq(1950, 2045, 5)))
+popIsodt = 
+  data.table::melt(popdt[,eval(popNames), with=FALSE], 
+       id.vars="iso", variable.name="year0", value.name="endPop000", 
+       variable.factor = FALSE)[,year0:=as.numeric(year0)][
+         ,`:=`(pop=endPop000*1e3, endPop000=NULL)
+       ][]
+
+```
+
+```{r}
+# Female Population
+data("popF", package="wpp2019")
+data("popFprojMed", package="wpp2019")
+
+wppHistoricPopF = as.data.table(popF)
+wppProjectedPopF = as.data.table(popFprojMed)
+
+popFdt = 
+  merge(wppHistoricPopF, wppProjectedPopF, by=c("name", "country_code", "age")) %>%
+  merge(unlargest200, by="country_code")  %>%
+  setnames(old="name", new="country_name") %>%
+  setcolorder(c("area_code", "reg_code", "country_code", 
+                "area_name", "reg_name", "country_name", "iso", "age"))
+
+popFNames = c("iso", "age", as.character(seq(1950, 2045, 5)))
+popFIsodt = 
+  data.table::melt(popFdt[,eval(popFNames), with=FALSE], 
+       id.vars=c("iso","age"), variable.name="year0", value.name="endPop000", 
+       variable.factor = FALSE)[,year0:=as.numeric(year0)][
+         ,`:=`(popF=endPop000*1e3, endPop000=NULL)
+       ][]
+
+```
+
+```{r}
+# Male Population
+data("popM", package="wpp2019")
+data("popMprojMed", package="wpp2019")
+
+wppHistoricPopM = as.data.table(popM)
+wppProjectedPopM = as.data.table(popMprojMed)
+
+popMdt = 
+  merge(wppHistoricPopM, wppProjectedPopM, by=c("name", "country_code", "age")) %>%
+  merge(unlargest200, by="country_code")  %>%
+  setnames(old="name", new="country_name") %>%
+  setcolorder(c("area_code", "reg_code", "country_code", 
+                "area_name", "reg_name", "country_name", "iso", "age"))
+
+popMNames = c("iso", "age", as.character(seq(1950, 2045, 5)))
+popMIsodt = 
+  data.table::melt(popMdt[,eval(popMNames), with=FALSE], 
+       id.vars=c("iso","age"), variable.name="year0", value.name="endPop000", 
+       variable.factor = FALSE)[,year0:=as.numeric(year0)][
+         ,`:=`(popM=endPop000*1e3, endPop000=NULL)
+       ][]
+
+```
+
+```{r}
+# latest flow data
+flow2019 = fread(file="../data/abelCohen2019flowsv6_flowdt.csv")
+
+flowMargin2019 = 
+  merge(flow2019[,.(inflow=sum(flow)), .(year0, iso=dest)], 
+        flow2019[,.(outflow=sum(flow)), .(year0, iso=orig)], 
+        by=c("year0", "iso"))[,netflow:=inflow-outflow]
+```
+
+```{r}
+data("migration", package="wpp2019")
+
+wppMigration = as.data.table(migration)
+
+# net migration in thousands of people over 5 year period
+netMigrantsdt = 
+  merge(wppMigration, unlargest200, by=c("country_code")) %>%
+  setnames(old="name", new="country_name") %>%
+  setcolorder(c("area_code", "reg_code", "country_code", 
+                "area_name", "reg_name", "country_name", "iso"))
+
+migPeriodNames = c("iso", paste0( seq(1950, 2040, 5), "-", seq(1955, 2045, 5) ))
+unNetMigdt = 
+  data.table::melt(netMigrantsdt[,eval(migPeriodNames), with=FALSE], 
+       id.vars="iso", variable.name="period", value.name="periodMigration000")[
+         ,year0:=tstrsplit(period, "-")[[1]]
+       ][,year0:=as.numeric(year0)][
+         ,`:=`(netflow=1000*periodMigration000, periodMigration000=NULL)
+       ][]
+
+```
+
+```{r}
+# Azose, Sevcikova, & Raftery (2016) method results
+# compiled from research/sevcikova/2021_02_11/mig_evaluation.Rmd lines 366-406
+asrMigPop90 = fread(file="welchRaftery2022revisionASR2016.csv")
+```
+
+# Forecast 
+
+```{r}
+flowPost = 
+  fread(file=file.path(forecastVersion, "flowPost.csv") ) %>%
+  merge(unlargest200[,.(origin=country_code, orig=iso)], by="origin") %>%
+  merge(unlargest200[,.(destination=country_code, dest=iso)], by="destination") %>%
+  .[,`:=`(origin=NULL, destination=NULL)] %>%
+  setcolorder(c("orig", "dest", "year")) %>%
+  .[] %>%
+  rbind( flow2019[year0==2015][
+    ,.(orig, dest, year=2018, q05=flow, q10=flow, q50=flow, q90=flow, q95=flow)] ) %>%
+  .[order(year, orig, dest)] %>%
+  .[,lapply(.SD, round),.(orig, dest, year)]
+```
+
+```{r}
+popf.last = 
+  popFIsodt[year0==2020][,.(popf=sum(popF)), iso][
+    ,.(iso, year=2018, q05f=popf, q10f=popf, q50f=popf, q90f=popf, q95f=popf)
+  ] %>%
+  setkeyv(cols=c("iso","year"))
+
+popm.last = 
+  popMIsodt[year0==2020][,.(popm=sum(popM)), iso][
+    ,.(iso, year=2018, q05m=popm, q10m=popm, q50m=popm, q90m=popm, q95m=popm)
+  ] %>%
+  setkeyv(cols=c("iso","year"))
+
+popt.last = 
+  popIsodt[year0==2020][
+    ,.(iso, year=2018, q05t=pop, q10t=pop, q50t=pop, q90t=pop, q95t=pop)] %>%
+  setkeyv(cols=c("iso","year"))
+
+pop.last = Reduce("merge", list(popf.last, popm.last, popt.last) )
+
+
+countryPopPost = 
+  fread(file=file.path(forecastVersion, "countryPost.csv") ) %>%
+  merge(unlargest200[,.(country_code, iso)], by="country_code") %>%
+  .[,country_code:=NULL] %>%
+  .[,lapply(.SD, function(x) round(x)),.(iso, year)] %>%
+  rbind( pop.last ) %>%
+  .[order(year, iso)]
+```
+
+```{r}
+countryPopAgePost = 
+  fread(file=file.path(forecastVersion, "countryAgePost.csv") ) %>%
+  merge(unlargest200[,.(country_code, iso)], by="country_code") %>%
+  .[,country_code:=NULL] %>%
+  .[,lapply(.SD, function(x) round(x)),.(iso, year, age)] 
+```
+
+```{r}
+flowMarginPost = 
+  fread(file=file.path(forecastVersion, "flowMarginPost.csv") )  %>%
+  merge(unlargest200[,.(country_code, iso)], by="country_code") %>%
+  .[,country_code:=NULL] %>%
+  .[,lapply(.SD, round),.(iso, year)] %>%
+  rbind(flowMargin2019[year0==2015][
+    ,.(iso, year=2018, 
+       q05in=inflow, q10in=inflow, q50in=inflow, q90in=inflow, q95in=inflow,
+       q05out=outflow, q10out=outflow, q50out=outflow, q90out=outflow, q95out=outflow,
+       q05net=netflow, q10net=netflow, q50net=netflow, q90net=netflow, q95net=netflow)]) %>%
+  .[order(year, iso)]
+```
+
+```{r}
+flowMarginPost[year %in% c(2018, 2023),.(iso, year, q50in)] %>% 
+  dcast(formula=iso~year, value.var="q50in") %>% 
+  .[,sum(`2023`<`2018`)]
+```
+
+```{r, eval=FALSE}
+plotAll = TRUE
+smoothData = FALSE
+
+smoothResults = function(year, lower, middle, upper, skip=0, spar=0.75){
+  lower.smooth = spline(year[-(1:skip)], lower[-(1:skip)])
+  middle.smooth = spline(year[-(1:skip)], middle[-(1:skip)])
+  upper.smooth = spline(year[-(1:skip)], upper[-(1:skip)])
+
+  outdt = 
+      data.table(year=c(year[1:skip], lower.smooth$x),
+             lower=c( lower[1:skip], 
+                   smooth.spline(lower.smooth$y, spar=spar)$y
+                   ), 
+             middle=c(middle[1:skip], 
+                   smooth.spline(middle.smooth$y, spar=spar)$y
+                   ), 
+             upper=c(upper[1:skip], 
+                   smooth.spline(upper.smooth$y, spar=spar)$y
+                   )
+             )
+  
+  return(outdt)
+}
+
+if(plotAll){
+  plotIsos = unlargest200$iso
+  pdf(file.path( forecastVersion, "forecast_plots.pdf") )
+} else {
+  plotIsos = c("ABW", "BRA", "CAN", "CHN","DEU", "DNK", "ESP", "FRA", "GBR", "IDN", "IND", 
+                "ITA", "MDG", "NLD", "PRT", "QAT", "SGP", "SWE", "USA", "ZAF", "ZWE")
+  pdf(file.path( forecastVersion, "forecast_sample.pdf") )
+}
+
+cols = c("Observed"="black", 
+         "WPP"="red", 
+         "Forecast"="blue", 
+         "Azose, Sevcikova, & Raftery (2016)"="grey70")
+
+largestOutFlows = 
+  flow2019[,.(total=sum(flow)), .(orig, dest)][
+    ,.SD[order(-total)][1:3],orig][order(orig, -total)]
+
+largestInFlows = 
+  flow2019[,.(total=sum(flow)), .(orig, dest)][
+    ,.SD[order(-total)][1:3],dest][order(dest, -total)]
+
+ageGroups = c(paste0( seq(0,95,5),"-", c(seq(0,100,5)-1)[-1]), "100+")
+
+for( thisIso in plotIsos ){  
+  
+  cat("Starting ", thisIso, "\n")
+  
+  plotScale = c(1e3, 1e5, 1e6)
+  interval = 
+    flowMarginPost[iso==thisIso][,max(abs(q95net))] %>% 
+    findInterval( vec=plotScale )
+  u=c("K", "K", "M")[interval]
+  s=(1/c(1e3, 1e3, 1e6))[interval]
+  a=c(0.1, 1, 0.1)[interval]
+  
+  if(smoothData){
+    inForecast = 
+      smoothResults(year=flowMarginPost[iso==thisIso, year], 
+                    lower=flowMarginPost[iso==thisIso, q05in], 
+                    middle=flowMarginPost[iso==thisIso, q50in], 
+                    upper=flowMarginPost[iso==thisIso, q95in], 
+                    skip=1, spar=0.65) %>%
+      set_colnames(c("year", "q05in", "q50in", "q95in"))
+    
+    outForecast = 
+      smoothResults(year=flowMarginPost[iso==thisIso, year], 
+                    lower=flowMarginPost[iso==thisIso, q05out], 
+                    middle=flowMarginPost[iso==thisIso, q50out], 
+                    upper=flowMarginPost[iso==thisIso, q95out], 
+                    skip=1, spar=0.65) %>%
+      set_colnames(c("year", "q05out", "q50out", "q95out"))
+    
+    netForecast = 
+      smoothResults(year=flowMarginPost[iso==thisIso, year], 
+                    lower=flowMarginPost[iso==thisIso, q05net], 
+                    middle=flowMarginPost[iso==thisIso, q50net], 
+                    upper=flowMarginPost[iso==thisIso, q95net], 
+                    skip=1, spar=0.65) %>%
+      set_colnames(c("year", "q05net", "q50net", "q95net"))
+  } else {
+    inForecast = flowMarginPost[iso==thisIso][,.(year, q05in, q50in, q95in)]
+    outForecast = flowMarginPost[iso==thisIso][,.(year, q05out, q50out, q95out)]
+    netForecast = flowMarginPost[iso==thisIso][,.(year, q05net, q50net, q95net)]
+  }
+  
+  # get Azose, Sevcikova, Raftery (2016) results
+  thisCountryCode = unlargest200[iso==thisIso, country_code]
+  asrMig = asrMigPop90[country_code==thisCountryCode, 
+                       .(year=year0-2, q05=migLower, q50=migMedian, q95=migUpper)]
+  asrPop = asrMigPop90[country_code==thisCountryCode, 
+                       .(year=year0-2, q05=popLower, q50=popMedian, q95=popUpper)]
+
+  inMig = 
+  ggplot(data=inForecast) + 
+  geom_line(data=flowMargin2019[iso==thisIso], 
+            aes(x=year0+3, y=inflow, col="Observed")) +
+  geom_line(aes(x=year, y=q50in, col="Forecast")) +
+  geom_ribbon(aes(x=year, ymin=q05in, ymax=q95in, fill="Forecast"),
+              alpha=0.25) + 
+  ylab("Inflow") + 
+  xlab("") + 
+  scale_colour_manual(name=element_blank(), values=cols) +
+  scale_fill_manual(name=element_blank(), values=cols) +
+  scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+  theme(legend.title=element_blank(), 
+        legend.position="none", 
+        axis.text.x=element_text(angle=-45, hjust=0, size=7),
+        axis.text.y=element_text(angle=0, hjust=0, size=7),
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0))
+
+
+  outMig = 
+  ggplot(data=outForecast) + 
+  geom_line(data=flowMargin2019[iso==thisIso], 
+            aes(x=year0+3, y=outflow, col="Observed")) +
+  geom_line(aes(x=year, y=q50out, col="Forecast")) +
+  geom_ribbon(aes(x=year, ymin=q05out, ymax=q95out, fill="Forecast"),
+              alpha=0.25) + 
+  ylab("Outflow") + 
+  xlab("") + 
+  scale_colour_manual(name=element_blank(),values=cols) +
+  scale_fill_manual(name=element_blank(),values=cols) +
+  scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+  theme(legend.title=element_blank(), 
+        legend.position="none", 
+        axis.text.x=element_text(angle=-45, hjust=0, size=7),
+        axis.text.y=element_text(angle=0, hjust=0, size=7),
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0))
+  
+  flowRange = range(0, 
+                    layer_scales(inMig)$y$range$range, 
+                    layer_scales(outMig)$y$range$range)
+
+  netMig = 
+  ggplot(data=netForecast) + 
+  geom_hline(yintercept=0, linetype="dashed", col="black") + 
+  geom_line(data=asrMig, aes(x=year, y=q50, 
+                col="Azose, Sevcikova, & Raftery (2016)")) +
+  geom_ribbon(data=asrMig, 
+              aes(x=year, ymin=q05, ymax=q95, 
+                  fill="Azose, Sevcikova, & Raftery (2016)"), alpha=0.5) +
+  geom_line(aes(x=year, y=q50net, col="Forecast")) +
+  geom_line(data=unNetMigdt[iso==thisIso], 
+            aes(x=year0+3, y=netflow, col="WPP")) +
+  geom_line(data=flowMargin2019[iso==thisIso], 
+            aes(x=year0+3, y=netflow, col="Observed")) +
+  geom_ribbon(aes(x=year, ymin=q05net, ymax=q95net, fill="Forecast"),
+              alpha=0.25) +
+  ylab("Net Flow") + 
+  xlab("") + 
+  coord_cartesian(xlim=c(1950, max(flowMarginPost$year)+2)) +
+  scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+  scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) +
+  scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+  guides(fill="none") + 
+  theme(legend.title=element_blank(), 
+        legend.position="bottom", 
+        legend.justification="center", 
+        axis.text.x=element_text(angle=-45, hjust=0, size=7),
+        axis.text.y=element_text(angle=0, hjust=0, size=7),
+        legend.text=element_text(size=8), 
+        plot.margin=margin(0,0,0,0)) 
+  
+  
+  popForecast = 
+    ggplot(data=countryPopPost[iso==thisIso]) +
+    geom_line(data=popIsodt[iso==thisIso], aes(x=year0-2, y=pop, col="WPP")) + 
+    geom_line(data=asrPop, aes(x=year, y=q50, 
+                               col="Azose, Sevcikova, & Raftery (2016)")) +
+    geom_ribbon(data=asrPop, 
+                aes(x=year, ymin=q05, ymax=q95, 
+                    fill="Azose, Sevcikova, & Raftery (2016)"), alpha=0.5) +
+    geom_line(aes(x=year, y=q50t, col="Forecast")) +
+    geom_ribbon(aes(x=year, ymin=q05t, ymax=q95t, fill="Forecast"), alpha=0.25) +
+    ylab("Population")+ 
+    xlab("") + 
+    coord_cartesian(xlim=c(1950,  popIsodt[,max(year0)])) +
+    scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+    scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) +
+    scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+    guides(fill="none") + 
+    theme(legend.title=element_blank(), 
+        legend.position="none", 
+        axis.text.x=element_text(angle=-45, hjust=0, size=7),
+        axis.text.y=element_text(angle=0, hjust=0, size=7),
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0))
+  
+  
+  # largest forecast flows
+  largestflows = 
+    flowPost[dest==thisIso & year<=2030 & year>2018, -"dest"][,-"year"][
+    ,lapply(.SD, sum), orig][order(-q50)][
+      ,.(orig, q50, cumq50=cumsum(q50)/sum(q50))]
+  
+  plotList = list()
+  j=1
+  for( o in largestflows[1:3,orig] ){
+    
+    if(smoothData){
+      largeFlowData = 
+        smoothResults(year=flowPost[orig==o & dest==thisIso, year], 
+                      lower=flowPost[orig==o & dest==thisIso, q05], 
+                      middle=flowPost[orig==o & dest==thisIso, q50], 
+                      upper=flowPost[orig==o & dest==thisIso, q95], 
+                      skip=1, spar=0.65) %>%
+      set_colnames(c("year", "q05", "q50", "q95"))
+    } else {
+      largeFlowData = flowPost[orig==o & dest==thisIso]
+    }
+    
+    plotList[[j]] = 
+      ggplot(data=largeFlowData) + 
+      geom_ribbon(aes(x=year, ymin=q05, ymax=q95, fill="Forecast"), 
+                  show.legend=FALSE, alpha=0.25) +
+      geom_line(aes(x=year, y=q50, col="Forecast"), 
+                  show.legend=FALSE) +
+      geom_line(data=flow2019[orig==o & dest==thisIso], 
+                aes(x=year0+3, y=flow, col="Observed")) +
+      ylab("") +
+      xlab("") + 
+      ggtitle(paste0(o, " - ", thisIso)) +
+      scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+      scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+      scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) + 
+      theme(plot.title=element_text(face="plain", size=10), 
+            axis.text.x=element_text(angle=-45, hjust=0, size=7),
+            axis.text.y=element_text(angle=0, hjust=0, size=7),
+            legend.position="none", 
+            plot.margin=margin(0,0,0,0) ) 
+    if(j==1) plotList[[j]] = plotList[[j]] + ylab("Flow")
+    j=j+1
+  }
+  plotRange = 
+    lapply(plotList, function(x) layer_scales(x)$y$range$range) %>% 
+    unlist() %>% 
+    range()
+  for(j in 1:3) plotList[[j]] = plotList[[j]] + coord_cartesian(ylim=range(0,plotRange))
+  
+  inflowRow = plot_grid( plotlist=plotList, nrow=1, ncol=3 )
+  
+  # population pyramid
+  forecastAgePopF2043 = 
+    countryPopAgePost[year==2043 & iso==thisIso][
+      ,.(age21=ifelse( age>=100, "100+", paste0( age, "-", age+4) ), 
+         q05f, q50f, q95f, q05m, q50m, q95m)][
+           ,lapply(.SD, sum), .(age=age21)
+         ][,age:=ordered(age, ageGroups)][order(age)][]
+
+  wppAgePopF2018 = 
+    popFIsodt[year0==2020 & iso==thisIso][,.(age=ordered(age, ageGroups), popF)][order(age)]
+  wppAgePopM2018 = 
+    popMIsodt[year0==2020 & iso==thisIso][,.(age=ordered(age, ageGroups), popM)][order(age)]
+  wppAgePop2018 = merge(wppAgePopF2018, wppAgePopM2018, by="age")
+
+  wppAgePopF2043 = 
+    popFIsodt[year0==2045 & iso==thisIso][,.(age=ordered(age, ageGroups), popF)][order(age)]
+  wppAgePopM2043 = 
+    popMIsodt[year0==2045 & iso==thisIso][,.(age=ordered(age, ageGroups), popM)][order(age)]
+  wppAgePop2043 = merge(wppAgePopF2043, wppAgePopM2043, by="age")
+
+  xLimit = forecastAgePopF2043[,max(q95m, q95f)]
+  xBreaks = seq( -xLimit, xLimit, xLimit/2) 
+  xLabels = paste0(abs(round(xBreaks*s, 1)), u)
+
+  popPyramid =
+    ggplot() + 
+    geom_hline(yintercept=0, size=0.5, linetype="dashed", color="grey") + 
+    xlab("Age") +
+    ylab("") +
+    coord_flip() +
+    # wpp last observed
+    geom_line(data=wppAgePop2018, aes(x=age, y=-popM, group=1, col="Observed"), 
+              alpha=0.75) +
+    geom_line(data=wppAgePop2018, aes(x=age, y=popF, group=1, col="Observed"), 
+              alpha=0.75) +
+    # wpp last forecast
+    geom_line(data=wppAgePop2043, 
+              aes(x=age, y=-popM, group=1, col="WPP"), alpha=0.75) +
+    geom_line(data=wppAgePop2043, 
+              aes(x=age, y=popF, group=1, col="WPP"), alpha=0.75) +
+    annotate("text", label="male", x="100+", y=-xLimit*0.8, size=3) + 
+    annotate("text", label="female", x="100+", y=xLimit*0.8, size=3) +
+    # median forecast
+    geom_line(data=forecastAgePopF2043, 
+              aes(x=age, y=-q50m, group=1, col="Forecast"), alpha=0.75) +
+    geom_line(data=forecastAgePopF2043, 
+              aes(x=age, y=q50f, group=1, col="Forecast"), alpha=0.75) +
+    # forecast bounds
+    geom_ribbon(data=forecastAgePopF2043, 
+                aes(x=age, ymin=-q95m, ymax=-q05m, group=1, fill="Forecast"), alpha=0.25) +
+    geom_ribbon(data=forecastAgePopF2043, 
+                aes(x=age, ymin=q05f, ymax=q95f, group=1, fill="Forecast"), alpha=0.25) +
+    scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+    scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) + 
+    scale_y_continuous(breaks=xBreaks, labels=xLabels) + 
+    theme(plot.title=element_text(face="plain", size=10), 
+          axis.text.x=element_text(angle=0, size=7),
+          axis.text.y=element_text(size=7),
+          legend.position="none") 
+
+  # combined plot  
+  theLegend = get_legend(netMig)
+  
+  theTitle =
+    ggdraw() + 
+    draw_label(
+      paste0(popdt[iso==thisIso, country_name], " (", thisIso, ")"),
+      fontface = 'bold', x=0, hjust=0) +
+    theme(plot.margin=margin(0,0,0,7) )
+  
+  popNetRow = plot_grid(netMig + theme(legend.position="none"), 
+                        popForecast + theme(legend.position="none"), 
+                        nrow=1, ncol=2, rel_widths=c(0.5, 0.5))
+  inOutPyrRow = plot_grid(inMig + coord_cartesian(ylim=flowRange), 
+                       outMig + coord_cartesian(ylim=flowRange), 
+                       popPyramid + theme(legend.position="none"),
+                       nrow=1, ncol=3, rel_widths=c(0.33, 0.33, 0.33)) 
+  allPlots = plot_grid( popNetRow, 
+                        inOutPyrRow, 
+                        inflowRow, nrow=3, ncol=1, 
+                        rel_heights=c(0.33, 0.33, 0.33))
+  allPlotsWithLegend = plot_grid(allPlots, theLegend, nrow=2, ncol=1, 
+                                 rel_heights=c(0.95, 0.025))
+  allPlotsWithLegendTitle = 
+    plot_grid(theTitle, allPlotsWithLegend, ncol=1, rel_heights=c(0.05, 1))
+
+  print( allPlotsWithLegendTitle )
+}
+
+dev.off()
+```
+
+# Case Study Plots
+
+```{r, eval=FALSE}
+save=TRUE
+
+cols = c("Observed"="black", 
+         "WPP"="red", 
+         "Forecast"="blue", 
+         "Azose, Sevcikova, & Raftery (2016)"="grey70")
+
+largestInFlows = 
+  flow2019[,.(total=sum(flow)), .(orig, dest)][
+    ,.SD[order(-total)][1:3],dest][order(dest, -total)]
+
+ageGroups = c(paste0( seq(0,95,5),"-", c(seq(0,100,5)-1)[-1]), "100+")
+
+for( thisIso in c("DEU", "AUS", "CAN", "UKR", "VEN") ){  
+  
+  plotScale = c(1e3, 1e5, 1e6)
+  interval = 
+    flowMarginPost[iso==thisIso][,max(abs(q95net))] %>% 
+    findInterval( vec=plotScale )
+  u=c("K", "K", "M")[interval]
+  s=(1/c(1e3, 1e3, 1e6))[interval]
+  a=c(0.1, 1, 0.1)[interval]
+  
+  # get Azose, Sevcikova, Raftery (2016) results
+  thisCountryCode = unlargest200[iso==thisIso, country_code]
+  asrMig = asrMigPop90[country_code==thisCountryCode, 
+                       .(year=year0-2, q05=migLower, q50=migMedian, q95=migUpper)]
+  asrPop = asrMigPop90[country_code==thisCountryCode, 
+                       .(year=year0-2, q05=popLower, q50=popMedian, q95=popUpper)]
+  
+  netMig = 
+  ggplot(data=flowMarginPost[iso==thisIso]) + 
+  geom_hline(yintercept=0, linetype="dashed", col="black") + 
+  geom_line(data=asrMig, aes(x=year, y=q50, 
+                col="Azose, Sevcikova, & Raftery (2016)")) +
+  geom_ribbon(data=asrMig, 
+              aes(x=year, ymin=q05, ymax=q95, 
+                  fill="Azose, Sevcikova, & Raftery (2016)"), alpha=0.5) +
+  geom_line(aes(x=year, y=q50net, col="Forecast")) +
+  geom_line(data=unNetMigdt[iso==thisIso], 
+            aes(x=year0+3, y=netflow, col="WPP")) +
+  geom_line(data=flowMargin2019[iso==thisIso], 
+            aes(x=year0+3, y=netflow, col="Observed")) +
+  geom_ribbon(aes(x=year, ymin=q05net, ymax=q95net, fill="Forecast"),
+              alpha=0.25) +
+  ylab("") + 
+  #xlab(paste0("(a) ", popdt[iso==thisIso, country_name], " Net Flow") ) +
+  #xlab("(a) Total Net Flow") +
+  xlab((expression(paste(bold("(a)"), " Total Net Flow") ) ) ) +
+  coord_cartesian(xlim=c(1950, max(flowMarginPost$year)+2)) +
+  scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+  scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) +
+  scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+  guides(fill="none") + 
+  theme(legend.title=element_blank(), 
+        legend.position="bottom", 
+        legend.justification="center", 
+        axis.text.x=element_text(size=7),
+        axis.text.y=element_text(size=7),
+        axis.title.x=element_text(size=8),
+        legend.text=element_text(size=8), 
+        plot.margin=margin(0,0,0,0)) 
+  
+  
+  popForecast = 
+    ggplot(data=countryPopPost[iso==thisIso]) +
+    geom_line(data=asrPop, aes(x=year, y=q50, 
+                               col="Azose, Sevcikova, & Raftery (2016)")) +
+    geom_ribbon(data=asrPop, 
+                aes(x=year, ymin=q05, ymax=q95, 
+                    fill="Azose, Sevcikova, & Raftery (2016)"), alpha=0.5) +
+    geom_line(aes(x=year, y=q50t, col="Forecast")) +
+    geom_line(data=popIsodt[iso==thisIso], aes(x=year0-2, y=pop, col="WPP")) + 
+    geom_line(aes(x=year, y=q50t, col="Forecast")) +
+    geom_ribbon(aes(x=year, ymin=q05t, ymax=q95t, fill="Forecast"), alpha=0.25) +
+    ylab("") + 
+    #xlab(paste0("(b) ", popdt[iso==thisIso, country_name], " Population") ) +
+    #xlab("(b) Population") +
+    xlab((expression(paste(bold("(b)"), " Population") ) ) ) +
+    coord_cartesian(xlim=c(1950,  popIsodt[,max(year0)])) +
+    scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+    scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) +
+    scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+    guides(fill="none") + 
+    theme(legend.title=element_blank(), 
+        legend.position="none", 
+        axis.text.x=element_text(size=7),
+        axis.text.y=element_text(size=7),
+        axis.title.x=element_text(size=8),
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0))
+
+  
+  inMig = 
+  ggplot(data=flowMarginPost[iso==thisIso]) + 
+  geom_line(data=flowMargin2019[iso==thisIso], 
+            aes(x=year0+3, y=inflow, col="Observed")) +
+  geom_line(aes(x=year, y=q50in, col="Forecast")) +
+  geom_ribbon(aes(x=year, ymin=q05in, ymax=q95in, fill="Forecast"),
+              alpha=0.25) + 
+  ylab("") + 
+  #xlab(paste0("(c) ", popdt[iso==thisIso, country_name], " Inflow") ) +
+  #xlab("(c) Total Inflow") +
+  xlab((expression(paste(bold("(c)"), " Total Inflow") ) ) ) +
+  scale_colour_manual(name=element_blank(), values=cols) +
+  scale_fill_manual(name=element_blank(), values=cols) +
+  scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+  theme(legend.title=element_blank(), 
+        legend.position="none", 
+        axis.text.x=element_text(size=7),
+        axis.text.y=element_text(size=7),
+        axis.title.x=element_text(size=8),
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0))
+
+
+  outMig = 
+  ggplot(data=flowMarginPost[iso==thisIso]) + 
+  geom_line(data=flowMargin2019[iso==thisIso], 
+            aes(x=year0+3, y=outflow, col="Observed")) +
+  geom_line(aes(x=year, y=q50out, col="Forecast")) +
+  geom_ribbon(aes(x=year, ymin=q05out, ymax=q95out, fill="Forecast"),
+              alpha=0.25) + 
+  ylab("") + 
+  #xlab(paste0("(d) ", popdt[iso==thisIso, country_name], " Outflow") ) +
+  #xlab("(d) Total Outflow") +
+  xlab((expression(paste(bold("(d)"), " Total Outflow") ) ) ) +
+  scale_colour_manual(name=element_blank(),values=cols) +
+  scale_fill_manual(name=element_blank(),values=cols) +
+  scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+  theme(legend.title=element_blank(), 
+        legend.position="none", 
+        axis.text.x=element_text(size=7),
+        axis.text.y=element_text(size=7),
+        axis.title.x=element_text(size=8),
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0))
+  
+  flowRange = range(0, 
+                    layer_scales(inMig)$y$range$range, 
+                    layer_scales(outMig)$y$range$range)
+
+  
+  # population pyramid
+  forecastAgePopF2043 = 
+    countryPopAgePost[year==2043 & iso==thisIso][
+      ,.(age21=ifelse( age>=100, "100+", paste0( age, "-", age+4) ), 
+         q05f, q50f, q95f, q05m, q50m, q95m)][
+           ,lapply(.SD, sum), .(age=age21)
+         ][,age:=ordered(age, ageGroups)][order(age)][]
+
+  wppAgePopF2018 = 
+    popFIsodt[year0==2020 & iso==thisIso][,.(age=ordered(age, ageGroups), popF)][order(age)]
+  wppAgePopM2018 = 
+    popMIsodt[year0==2020 & iso==thisIso][,.(age=ordered(age, ageGroups), popM)][order(age)]
+  wppAgePop2018 = merge(wppAgePopF2018, wppAgePopM2018, by="age")
+
+  wppAgePopF2043 = 
+    popFIsodt[year0==2045 & iso==thisIso][,.(age=ordered(age, ageGroups), popF)][order(age)]
+  wppAgePopM2043 = 
+    popMIsodt[year0==2045 & iso==thisIso][,.(age=ordered(age, ageGroups), popM)][order(age)]
+  wppAgePop2043 = merge(wppAgePopF2043, wppAgePopM2043, by="age")
+
+  xLimit = forecastAgePopF2043[,max(q95m, q95f)]
+  xBreaks = seq( -xLimit, xLimit, xLimit/2) 
+  xLabels = paste0(abs(round(xBreaks*s, 1)), u)
+
+  popPyramid =
+    ggplot() + 
+    geom_hline(yintercept=0, size=0.5, linetype="dashed", color="grey") + 
+    xlab("") +
+    #ylab("(e) 2040-2045 Population") +
+    ylab((expression(paste(bold("(e)"), " 2040-2045 Population") ) ) ) +
+    coord_flip() +
+    # wpp last observed
+    geom_line(data=wppAgePop2018, aes(x=age, y=-popM, group=1, col="Observed"), 
+              alpha=0.75) +
+    geom_line(data=wppAgePop2018, aes(x=age, y=popF, group=1, col="Observed"), 
+              alpha=0.75) +
+    # wpp last forecast
+    geom_line(data=wppAgePop2043, 
+              aes(x=age, y=-popM, group=1, col="WPP"), alpha=0.75) +
+    geom_line(data=wppAgePop2043, 
+              aes(x=age, y=popF, group=1, col="WPP"), alpha=0.75) +
+    annotate("text", label="male", x="100+", y=-xLimit*0.8, size=3) + 
+    annotate("text", label="female", x="100+", y=xLimit*0.8, size=3) +
+    # median forecast
+    geom_line(data=forecastAgePopF2043, 
+              aes(x=age, y=-q50m, group=1, col="Forecast"), alpha=0.75) +
+    geom_line(data=forecastAgePopF2043, 
+              aes(x=age, y=q50f, group=1, col="Forecast"), alpha=0.75) +
+    # forecast bounds
+    geom_ribbon(data=forecastAgePopF2043, 
+                aes(x=age, ymin=-q95m, ymax=-q05m, group=1, fill="Forecast"), alpha=0.25) +
+    geom_ribbon(data=forecastAgePopF2043, 
+                aes(x=age, ymin=q05f, ymax=q95f, group=1, fill="Forecast"), alpha=0.25) +
+    scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+    scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) + 
+    scale_y_continuous(breaks=xBreaks, labels=xLabels) + 
+    theme(plot.title=element_text(face="plain", size=10), 
+          axis.text.y=element_text(size=7),
+          axis.text.x=element_text(size=7),
+          axis.title.x=element_text(size=8),
+          legend.position="none") 
+  
+  
+  # largest forecast flows
+  largestflows = 
+    flowPost[dest==thisIso & year<=2030 & year>2018, -"dest"][,-"year"][
+    ,lapply(.SD, sum), orig][order(-q50)][
+      ,.(orig, q50, cumq50=cumsum(q50)/sum(q50))]
+  xlabel = c("(f)", "(g)", "(h)")
+  
+  tmp = popdt[iso==thisIso, country_name]
+  destName = 
+    switch(tmp, 
+           "Venezuela (Bolivarian Republic of)"="Venezuela", 
+           "United States of America"="United States"
+    )
+  destName = ifelse(is.null(destName), tmp, destName)
+  
+  plotList = list()
+  j=1
+  for( o in largestflows[1:3,orig] ){
+    
+    tmp = popdt[iso==o, country_name]
+    origName = ifelse(tmp=="United States of America", "United States", tmp)
+    
+    
+    odlab = paste0(" ", origName,"-", destName)
+    odlab2 = 
+      switch(as.character(j), 
+             "1"=bquote( paste( bold("(f)"), .(odlab) ) ), 
+             "2"=bquote( paste( bold("(g)"), .(odlab) ) ), 
+             "3"=bquote( paste( bold("(h)"), .(odlab) ) )
+      )
+    
+    plotList[[j]] = 
+      ggplot(data=flowPost[orig==o & dest==thisIso]) + 
+      geom_ribbon(aes(x=year, ymin=q05, ymax=q95, fill="Forecast"), 
+                  show.legend=FALSE, alpha=0.25) +
+      geom_line(aes(x=year, y=q50, col="Forecast"), 
+                  show.legend=FALSE) +
+      geom_line(data=flow2019[orig==o & dest==thisIso], 
+                aes(x=year0+3, y=flow, col="Observed")) +
+      ylab("") +
+      xlab(odlab2) + 
+      scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+      scale_y_continuous(labels = unit_format(accuracy=a, unit=u, scale=s)) +
+      scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) + 
+      theme(plot.title=element_text(face="plain", size=10), 
+            axis.text.x=element_text(size=7),
+            axis.text.y=element_text(size=7),
+            axis.title.x=element_text(size=8),
+            legend.position="none", 
+            plot.margin=margin(0,0,0,0) ) 
+    j=j+1
+  }
+  plotRange = 
+    lapply(plotList, function(x) layer_scales(x)$y$range$range) %>% 
+    unlist() %>% 
+    range()
+  for(j in 1:3) plotList[[j]] = plotList[[j]] + coord_cartesian(ylim=range(0,plotRange))
+  
+  inflowRow = plot_grid( plotlist=plotList, nrow=1, ncol=3 )
+
+  # combined plot  
+  theLegend = get_legend(netMig)
+  
+  popNetRow = plot_grid(netMig + theme(legend.position="none"), 
+                        popForecast + theme(legend.position="none"), 
+                        nrow=1, ncol=2, rel_widths=c(0.5, 0.5))
+  inOutPyrRow = plot_grid(inMig + coord_cartesian(ylim=flowRange), 
+                       outMig + coord_cartesian(ylim=flowRange), 
+                       popPyramid + theme(legend.position="none"),
+                       nrow=1, ncol=3, rel_widths=c(0.33, 0.33, 0.33), align="h") 
+  allPlots = plot_grid( popNetRow, 
+                        inOutPyrRow, 
+                        inflowRow, nrow=3, ncol=1, 
+                        rel_heights=c(0.33, 0.33, 0.33))
+  allPlotsWithLegend = plot_grid(allPlots, theLegend, nrow=2, ncol=1, 
+                                 rel_heights=c(0.95, 0.025))
+  
+  if(save){
+      ggsave(filename=paste0(thisIso, "_case.pdf"), 
+             plot=allPlotsWithLegend, 
+             path="../submission/",
+             width=7, height=6, units="in")
+  }
+
+  print( allPlotsWithLegend )
+}
+```
+
+# Proportion of Globe Migrating
+
+```{r}
+
+globalFlowObserved = 
+  merge( flowMargin2019[,.(globe.flow=sum(inflow)), year0], 
+         popIsodt[,.(globe.pop=sum(pop)), year0], by="year0")[,year:=year0+3]
+  
+globalFlowForecast = 
+  fread(file=file.path(forecastVersion, "globalMigrationPost.csv"))[
+    ,.(year, q05=q05cnt, q10=q10cnt, q50=q50cnt, q90=q90cnt, q95=q95cnt)] %>%
+  rbind(globalFlowObserved[year==2018, 
+                           .(year, 
+                             q05=globe.flow, 
+                             q10=globe.flow, 
+                             q50=globe.flow, 
+                             q90=globe.flow, 
+                             q95=globe.flow)]) %>%
+  arrange(year)
+  
+```
+
+```{r}
+globalPercentObserved = 
+  globalFlowObserved[,.(year0, pctMig=100*globe.flow/globe.pop)]
+
+globalPercentForecast = 
+  fread(file=file.path(forecastVersion, "globalMigrationPost.csv"))[
+    ,.(year, q05=q05pct, q10=q10cnt, q50=q50pct, q90=q90pct, q95=q95pct)] %>%
+  rbind(globalPercentObserved[year0==2015][
+    ,.(year=2018, q05=pctMig, q10=pctMig, q50=pctMig, q90=pctMig, q95=pctMig)]) %>%
+  arrange(year)
+
+
+smooth05 = spline(globalPercentForecast$year, globalPercentForecast$q05)
+smooth50 = spline(globalPercentForecast$year, globalPercentForecast$q50)
+smooth95 = spline(globalPercentForecast$year, globalPercentForecast$q95)
+smoothForecastdt = data.table(year=smooth05$x, 
+                              q05=smooth05$y,
+                              q50=smooth50$y,
+                              q95=smooth95$y)
+
+smoothResults = function(dt, skip=1, spar=0.65){
+  smooth05 = spline(dt$year, dt$q05)
+  smooth50 = spline(dt$year, dt$q50)
+  smooth95 = spline(dt$year, dt$q95)
+
+  outdt = 
+      data.table(year=smooth05$x,
+             q05=c(smooth05$y[1:skip], 
+                   smooth.spline(smooth05$y[-(1:skip)], spar=spar)$y
+                   ), 
+             q50=c(smooth50$y[1:skip], 
+                   smooth.spline(smooth50$y[-(1:skip)], spar=spar)$y
+                   ), 
+             q95=c(smooth95$y[1:skip], 
+                   smooth.spline(smooth95$y[-(1:skip)], spar=spar)$y
+                   )
+             )
+  
+  return(outdt)
+}
+
+smoothForecastdt = smoothResults(dt=globalPercentForecast)
+  
+```
+
+```{r}
+
+globePercentMigration = 
+  ggplot() + 
+  geom_ribbon(data=smoothForecastdt, 
+              aes(x=year, ymin=q05, ymax=q95, 
+                  fill="Forecast"), show.legend=FALSE, alpha=0.25) + 
+  geom_line(data=smoothForecastdt, 
+              aes(x=year, y=q50, col="Forecast"), alpha=1) +
+  geom_point(data=globalPercentObserved, 
+             aes(x=year0+3, y=pctMig, col="Observed")) + 
+  geom_line(data=globalPercentObserved, 
+            aes(x=year0+3, y=pctMig, col="Observed")) +
+  scale_colour_manual(name=element_blank(),values=cols) + 
+  scale_fill_manual(name=element_blank(),values=cols) + 
+  theme(legend.title=element_blank(), 
+        legend.position="none", 
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0) ) + 
+  xlab("") + 
+  ylab("Percent of Globe Migrating")
+
+globePercentMigration
+```
+
+```{r}
+
+globeCountMigration = 
+  ggplot() + 
+  geom_ribbon(data=globalFlowForecast, 
+              aes(x=year, ymin=q05, ymax=q95, 
+                  fill="Forecast"), show.legend=FALSE, alpha=0.25) + 
+  geom_line(data=globalFlowForecast, 
+              aes(x=year, y=q50, col="Forecast"), alpha=1) +
+  geom_point(data=globalFlowObserved, 
+             aes(x=year0+3, y=globe.flow, col="Observed")) + 
+  geom_line(data=globalFlowObserved, 
+            aes(x=year0+3, y=globe.flow, col="Observed")) +
+  scale_colour_manual(name=element_blank(),values=cols) + 
+  scale_fill_manual(name=element_blank(),values=cols) + 
+  scale_y_continuous(labels=unit_format(accuracy=1, unit="", scale = 1e-6)) +
+  theme(legend.title=element_blank(), 
+        legend.position="none", 
+        legend.justification="center",
+        plot.margin=margin(0,0,0,0) ) + 
+  xlab("") + 
+  ylab("Migrants (millions)")
+
+
+globeCountMigration
+```
+
+```{r, eval=FALSE}
+ggsave(filename="globePercentMigration.png",
+        plot=globePercentMigration,
+        path="../submission/",
+        width=6, height=4, units="in")
+
+ggsave(filename="globeCountMigration.png",
+        plot=globeCountMigration,
+        path="../submission/",
+        width=6, height=4, units="in")
+```
+
+```{r}
+c(forecast.lower=globalPercentForecast[year==2043][,q05], 
+  forecast.med=globalPercentForecast[year==2043][,q50], 
+  forecast.upper=globalPercentForecast[year==2043][,q95] )
+
+c(observed.lower=globalPercentObserved[,min(pctMig)], 
+  observed.mean=globalPercentObserved[,mean(pctMig)],
+  observed.upper=globalPercentObserved[,max(pctMig)], 
+  observed.last=globalPercentObserved[year0==2015, pctMig])
+
+globalFlowForecast[year==2043, -"year"]/1e6
+```
+
+```{r}
+percentIncreaseCount = 
+  100*(globalFlowForecast[year==2043,q50]/globalFlowForecast[year==2018,q50] - 1)
+
+percentIncreaseRate = 
+  100*(globalPercentForecast[year==2043,q50]/globalPercentForecast[year==2018,q50] - 1)
+
+c("count_increase"=percentIncreaseCount, 
+  "percent_increase"=percentIncreaseRate) %>% round(1)
+```
+
+
+### Individual FLows
+
+```{r, eval=FALSE}
+
+pdf( file.path( forecastVersion, "flow_forecast_plots.pdf") )
+
+cols = c("Forecast"="blue", 
+         "WPP"="red", 
+         "Observed"="black")
+
+largestFlows = 
+  flow2019[,.(total=sum(flow)), .(orig, dest)][
+    ,.SD[order(-total)][1:3],orig][order(orig, -total)]
+
+index = seq(1, nrow(largestFlows), 3)
+ii = 1
+plotRow = list()
+for(i in index){
+  od = largestFlows[i:(i+2)]
+  o = od$orig[1]
+  
+  plotList = list()
+  for(j in 1:3){
+    d = od$dest[j]
+    
+    flow2010 = 
+      flow2019[orig==o & dest==d & year0==2010][
+        ,.(year, lower=flow, estimate=flow, upper=flow)]
+    
+    largeFlowData = flowPost[orig==o & dest==d]
+    
+    plotList[[j]] = 
+      ggplot(data=flowPost[orig==o & dest==d]) + 
+      geom_ribbon(aes(x=year, ymin=q05, ymax=q95, fill="Forecast"), 
+                  show.legend=FALSE, alpha=0.25) +
+      geom_line(aes(x=year, y=q50, col="Forecast"), 
+                  show.legend=FALSE) +
+      geom_line(data=flow2019[orig==o & dest==d], 
+                aes(x=year0+3, y=flow, col="Observed")) +
+      ylab("") +
+      xlab("") + 
+      ggtitle(paste0(o, " - ", d)) +
+      scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+      scale_y_continuous(labels = unit_format(accuracy=1, unit="K", scale=1e-3)) +
+      scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) + 
+      theme(plot.title=element_text(face="plain", size=10), 
+            axis.text.x=element_text(angle=-45, hjust=0, size=7),
+            axis.text.y=element_text(angle=0, hjust=0, size=7),
+            legend.position="none", 
+            plot.margin=margin(0,0,0,0) ) 
+    
+    if(j==1) plotList[[j]] = plotList[[j]] + ylab(o)
+      
+  }
+  
+  plotRange = 
+    lapply(plotList, function(x) layer_scales(x)$y$range$range) %>% 
+    unlist() %>% 
+    range()
+  
+  for(j in 1:3) plotList[[j]] = plotList[[j]] + coord_cartesian(ylim=plotRange)
+  
+  plotRow[[ii]] = plot_grid( plotlist=plotList, nrow=1, ncol=3 )
+  if(ii==3){
+    print( plot_grid(plotRow[[1]], plotRow[[2]], plotRow[[3]], nrow=3, ncol=1) )
+    ii=0
+  }
+  ii = ii + 1
+  
+  if(i==598){
+    print( plot_grid(plotRow[[1]], plotRow[[2]], nrow=3, ncol=1) )
+  }
+}
+
+dev.off()
+```
+
+```{r, eval=FALSE}
+
+pdf( file.path( forecastVersion, "germany_forecast_plots.pdf") )
+
+cols = c("Forecast"="blue", 
+         "WPP"="red", 
+         "Observed"="black")
+
+largestOutFlows = 
+  flow2019[,.(total=sum(flow)), .(orig, dest)][orig=="DEU"][
+      order(-total)][1:9]
+
+index = seq(1, 9, 3)
+ii = 1
+plotRow = list()
+for(i in index){
+  od = largestOutFlows[i:(i+2)]
+  o = "DEU"
+  
+  plotList = list()
+  for(j in 1:3){
+    d = od$dest[j]
+    
+    tmp = popdt[iso==d, country_name]
+    destName = 
+      switch(tmp, 
+             "Russian Federation"="Russia", 
+             "United States of America"="United States"
+      )
+    destName = ifelse(is.null(destName), tmp, destName)
+    
+    flow2010 = 
+      flow2019[orig==o & dest==d & year0==2010][
+        ,.(year, lower=flow, estimate=flow, upper=flow)]
+    
+    largeFlowData = flowPost[orig==o & dest==d]
+    
+    plotList[[j]] = 
+      ggplot(data=flowPost[orig==o & dest==d]) + 
+      geom_ribbon(aes(x=year, ymin=q05, ymax=q95, fill="Forecast"), 
+                  show.legend=FALSE, alpha=0.25) +
+      geom_line(aes(x=year, y=q50, col="Forecast"), 
+                  show.legend=FALSE) +
+      geom_line(data=flow2019[orig==o & dest==d], 
+                aes(x=year0+3, y=flow, col="Observed")) +
+      ylab("") +
+      xlab("") + 
+      #ggtitle(paste0(o, " - ", d)) +
+      ggtitle(paste0("Destination: ", destName)) + 
+      scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+      scale_y_continuous(labels = unit_format(accuracy=1, unit="K", scale=1e-3)) +
+      scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) + 
+      theme(plot.title=element_text(face="plain", size=10), 
+            axis.text.x=element_text(angle=-45, hjust=0, size=7),
+            axis.text.y=element_text(angle=0, hjust=0, size=7),
+            axis.title.y=element_text(face="plain", size=10),
+            legend.position="none", 
+            plot.margin=margin(0,0,0,0) ) 
+    
+    if(j==1) plotList[[j]] = plotList[[j]] + ylab("Origin: Germany")
+      
+  }
+  
+  plotRange = 
+    lapply(plotList, function(x) layer_scales(x)$y$range$range) %>% 
+    unlist() %>% 
+    range()
+  
+  for(j in 1:3) plotList[[j]] = plotList[[j]] + coord_cartesian(ylim=plotRange)
+  
+  plotRow[[ii]] = plot_grid( plotlist=plotList, nrow=1, ncol=3 )
+  if(ii==3){
+    print( plot_grid(plotRow[[1]], plotRow[[2]], plotRow[[3]], nrow=3, ncol=1) )
+    ii=0
+  }
+  ii = ii + 1
+}
+
+dev.off()
+```
+
+```{r, eval=FALSE}
+
+pdf( file.path( forecastVersion, "venezuela_forecast_plots.pdf") )
+
+cols = c("Forecast"="blue", 
+         "WPP"="red", 
+         "Observed"="black")
+
+largestOutFlows = 
+  flow2019[,.(total=sum(flow)), .(orig, dest)][
+    orig=="VEN"][
+      order(-total)][1:9]
+
+index = seq(1, 9, 3)
+ii = 1
+plotRow = list()
+for(i in index){
+  od = largestOutFlows[i:(i+2)]
+  o = "VEN"
+  
+  plotList = list()
+  for(j in 1:3){
+    d = od$dest[j]
+    
+    tmp = popdt[iso==d, country_name]
+    destName = 
+      switch(tmp, 
+             "Republic of Moldova"="Moldova", 
+             "United States of America"="United States"
+      )
+    destName = ifelse(is.null(destName), tmp, destName)
+    
+    flow2010 = 
+      flow2019[orig==o & dest==d & year0==2010][
+        ,.(year, lower=flow, estimate=flow, upper=flow)]
+    
+    largeFlowData = flowPost[orig==o & dest==d]
+    
+    plotList[[j]] = 
+      ggplot(data=flowPost[orig==o & dest==d]) + 
+      geom_ribbon(aes(x=year, ymin=q05, ymax=q95, fill="Forecast"), 
+                  show.legend=FALSE, alpha=0.25) +
+      geom_line(aes(x=year, y=q50, col="Forecast"), 
+                  show.legend=FALSE) +
+      geom_line(data=flow2019[orig==o & dest==d], 
+                aes(x=year0+3, y=flow, col="Observed")) +
+      ylab("") +
+      xlab("") + 
+      #ggtitle(paste0(o, " - ", d)) +
+      ggtitle(paste0("Destination: ", destName)) + 
+      scale_colour_manual(name=element_blank(), values=cols, drop=FALSE) +
+      scale_y_continuous(labels = unit_format(accuracy=1, unit="K", scale=1e-3)) +
+      scale_fill_manual(name=element_blank(), values=cols, drop=FALSE) + 
+      theme(plot.title=element_text(face="plain", size=10), 
+            axis.text.x=element_text(angle=-45, hjust=0, size=7),
+            axis.text.y=element_text(angle=0, hjust=0, size=7),
+            axis.title.y=element_text(face="plain", size=10),
+            legend.position="none", 
+            plot.margin=margin(0,0,0,0) ) 
+    
+    if(j==1) plotList[[j]] = plotList[[j]] + ylab("Origin: Venezuela")
+      
+  }
+  
+  plotRange = 
+    lapply(plotList, function(x) layer_scales(x)$y$range$range) %>% 
+    unlist() %>% 
+    range()
+  
+  for(j in 1:3) plotList[[j]] = plotList[[j]] + coord_cartesian(ylim=plotRange)
+  
+  plotRow[[ii]] = plot_grid( plotlist=plotList, nrow=1, ncol=3 )
+  if(ii==3){
+    print( plot_grid(plotRow[[1]], plotRow[[2]], plotRow[[3]], nrow=3, ncol=1) )
+    ii=0
+  }
+  ii = ii + 1
+}
+
+dev.off()
+```
+
+```{r}
+flowPostSI = flowPost[year!=2018][,.(orig, dest, year0=year-3, 
+                                     quantile05=floor(q05), 
+                                     quantile50=round(q50), 
+                                     quantile95=ceiling(q95))]
+fwrite(flowPostSI, file=file.path( forecastVersion, "forecast_quantiles.csv"))
+```
+

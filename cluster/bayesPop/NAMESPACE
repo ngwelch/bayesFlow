@@ -1,0 +1,80 @@
+useDynLib(bayesPop, .registration = TRUE)
+
+# import
+import(
+    bayesTFR, bayesLife, MortCast, parallel, abind, wpp2017, wpp2012, fields, googleVis, rworldmap
+)
+
+importFrom("graphics", "par", "plot", "grid", "lines", "mtext", "axis", "segments")
+importFrom("grDevices", "dev.off", "rainbow", "adjustcolor")
+importFrom("stats", "reshape", "lm", "coefficients", "smooth.spline", "approx", "median", "quantile", 
+           "sd", "aggregate")
+importFrom("utils", "write.table", "read.table", "menu", "read.csv", "read.delim", "data")
+importFrom("truncnorm", "rtruncnorm")
+importFrom("reshape2", "melt")
+importFrom("plyr", "aaply")
+import(data.table, except=c(melt))
+
+#exportPattern("^[[:alpha:]]+")
+useDynLib(bayesPop)
+
+# export functions
+export(
+pop.predict,
+pop.predict.subnat,
+pop.trajectories.plot,
+pop.trajectories.plotAll,
+pop.trajectories.table,
+pop.byage.plot,
+pop.byage.plotAll,
+pop.byage.table,
+pop.pyramid,
+pop.pyramidAll,
+pop.trajectories.pyramid,
+pop.trajectories.pyramidAll,
+get.pop.prediction,
+has.pop.prediction,
+pop.aggregate,
+pop.aggregate.subnat,
+get.pop.aggregation,
+get.bPop.pyramid,
+pop.map,
+get.pop.map.parameters,
+pop.map.gvis,
+write.pop.projection.summary,
+pop.cleanup.cache,
+LifeTableMx,
+LifeTableMxCol,
+get.pop,
+get.pop.ex,
+get.pop.exba,
+pop.trajectories,
+get.trajectory.indices,
+extract.trajectories.eq,
+extract.trajectories.ge,
+extract.trajectories.le,
+cohorts,
+pop.cohorts.plot,
+mac.expression,
+age.specific.migration,
+project.pasfr,
+project.pasfr.traj,
+get.migration.thresholds
+)
+
+# register S3 methods
+S3method(summary, bayesPop.prediction)
+S3method(print, summary.bayesPop.prediction)
+S3method(get.countries.table, bayesPop.prediction)
+S3method(pop.pyramid, bayesPop.prediction)
+S3method(pop.pyramid, bayesPop.pyramid)
+S3method(plot, bayesPop.pyramid)
+S3method(pop.trajectories.pyramid, bayesPop.prediction)
+S3method(pop.trajectories.pyramid, bayesPop.pyramid)
+S3method(get.bPop.pyramid, bayesPop.prediction)
+S3method(get.bPop.pyramid, data.frame)
+S3method(get.bPop.pyramid, matrix)
+S3method(get.bPop.pyramid, list)
+S3method(get.data.for.worldmap, bayesPop.prediction)
+S3method(.map.main.default, bayesPop.prediction)
+S3method(bdem.map.gvis, bayesPop.prediction)

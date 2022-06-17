@@ -1,0 +1,201 @@
+iso,area_name,country_code,area_code,reg_code,reg_name
+AFG,Asia,4,935,5501,Southern Asia
+ALB,Europe,8,908,925,Southern Europe
+DZA,Africa,12,903,912,Northern Africa
+AGO,Africa,24,903,911,Middle Africa
+ATG,Latin America and the Caribbean,28,904,915,Caribbean
+AZE,Asia,31,935,922,Western Asia
+ARG,Latin America and the Caribbean,32,904,931,South America
+AUS,Oceania,36,909,927,Australia/New Zealand
+AUT,Europe,40,908,926,Western Europe
+BHS,Latin America and the Caribbean,44,904,915,Caribbean
+BHR,Asia,48,935,922,Western Asia
+BGD,Asia,50,935,5501,Southern Asia
+ARM,Asia,51,935,922,Western Asia
+BRB,Latin America and the Caribbean,52,904,915,Caribbean
+BEL,Europe,56,908,926,Western Europe
+BTN,Asia,64,935,5501,Southern Asia
+BOL,Latin America and the Caribbean,68,904,931,South America
+BIH,Europe,70,908,925,Southern Europe
+BWA,Africa,72,903,913,Southern Africa
+BRA,Latin America and the Caribbean,76,904,931,South America
+BLZ,Latin America and the Caribbean,84,904,916,Central America
+SLB,Oceania,90,909,928,Melanesia
+BRN,Asia,96,935,920,South-Eastern Asia
+BGR,Europe,100,908,923,Eastern Europe
+MMR,Asia,104,935,920,South-Eastern Asia
+BDI,Africa,108,903,910,Eastern Africa
+BLR,Europe,112,908,923,Eastern Europe
+KHM,Asia,116,935,920,South-Eastern Asia
+CMR,Africa,120,903,911,Middle Africa
+CAN,Northern America,124,905,905,Northern America
+CPV,Africa,132,903,914,Western Africa
+CAF,Africa,140,903,911,Middle Africa
+LKA,Asia,144,935,5501,Southern Asia
+TCD,Africa,148,903,911,Middle Africa
+CHL,Latin America and the Caribbean,152,904,931,South America
+CHN,Asia,156,935,906,Eastern Asia
+COL,Latin America and the Caribbean,170,904,931,South America
+COM,Africa,174,903,910,Eastern Africa
+MYT,Africa,175,903,910,Eastern Africa
+COG,Africa,178,903,911,Middle Africa
+COD,Africa,180,903,911,Middle Africa
+CRI,Latin America and the Caribbean,188,904,916,Central America
+HRV,Europe,191,908,925,Southern Europe
+CUB,Latin America and the Caribbean,192,904,915,Caribbean
+CYP,Asia,196,935,922,Western Asia
+CZE,Europe,203,908,923,Eastern Europe
+BEN,Africa,204,903,914,Western Africa
+DNK,Europe,208,908,924,Northern Europe
+DOM,Latin America and the Caribbean,214,904,915,Caribbean
+ECU,Latin America and the Caribbean,218,904,931,South America
+SLV,Latin America and the Caribbean,222,904,916,Central America
+GNQ,Africa,226,903,911,Middle Africa
+ETH,Africa,231,903,910,Eastern Africa
+ERI,Africa,232,903,910,Eastern Africa
+EST,Europe,233,908,924,Northern Europe
+FJI,Oceania,242,909,928,Melanesia
+FIN,Europe,246,908,924,Northern Europe
+FRA,Europe,250,908,926,Western Europe
+GUF,Latin America and the Caribbean,254,904,931,South America
+PYF,Oceania,258,909,957,Polynesia
+DJI,Africa,262,903,910,Eastern Africa
+GAB,Africa,266,903,911,Middle Africa
+GEO,Asia,268,935,922,Western Asia
+GMB,Africa,270,903,914,Western Africa
+PSE,Asia,275,935,922,Western Asia
+DEU,Europe,276,908,926,Western Europe
+GHA,Africa,288,903,914,Western Africa
+KIR,Oceania,296,909,954,Micronesia
+GRC,Europe,300,908,925,Southern Europe
+GRD,Latin America and the Caribbean,308,904,915,Caribbean
+GLP,Latin America and the Caribbean,312,904,915,Caribbean
+GUM,Oceania,316,909,954,Micronesia
+GTM,Latin America and the Caribbean,320,904,916,Central America
+GIN,Africa,324,903,914,Western Africa
+GUY,Latin America and the Caribbean,328,904,931,South America
+HTI,Latin America and the Caribbean,332,904,915,Caribbean
+HND,Latin America and the Caribbean,340,904,916,Central America
+HKG,Asia,344,935,906,Eastern Asia
+HUN,Europe,348,908,923,Eastern Europe
+ISL,Europe,352,908,924,Northern Europe
+IND,Asia,356,935,5501,Southern Asia
+IDN,Asia,360,935,920,South-Eastern Asia
+IRN,Asia,364,935,5501,Southern Asia
+IRQ,Asia,368,935,922,Western Asia
+IRL,Europe,372,908,924,Northern Europe
+ISR,Asia,376,935,922,Western Asia
+ITA,Europe,380,908,925,Southern Europe
+CIV,Africa,384,903,914,Western Africa
+JAM,Latin America and the Caribbean,388,904,915,Caribbean
+JPN,Asia,392,935,906,Eastern Asia
+KAZ,Asia,398,935,5500,Central Asia
+JOR,Asia,400,935,922,Western Asia
+KEN,Africa,404,903,910,Eastern Africa
+PRK,Asia,408,935,906,Eastern Asia
+KOR,Asia,410,935,906,Eastern Asia
+KWT,Asia,414,935,922,Western Asia
+KGZ,Asia,417,935,5500,Central Asia
+LAO,Asia,418,935,920,South-Eastern Asia
+LBN,Asia,422,935,922,Western Asia
+LSO,Africa,426,903,913,Southern Africa
+LVA,Europe,428,908,924,Northern Europe
+LBR,Africa,430,903,914,Western Africa
+LBY,Africa,434,903,912,Northern Africa
+LTU,Europe,440,908,924,Northern Europe
+LUX,Europe,442,908,926,Western Europe
+MAC,Asia,446,935,906,Eastern Asia
+MDG,Africa,450,903,910,Eastern Africa
+MWI,Africa,454,903,910,Eastern Africa
+MYS,Asia,458,935,920,South-Eastern Asia
+MDV,Asia,462,935,5501,Southern Asia
+MLI,Africa,466,903,914,Western Africa
+MLT,Europe,470,908,925,Southern Europe
+MTQ,Latin America and the Caribbean,474,904,915,Caribbean
+MRT,Africa,478,903,914,Western Africa
+MUS,Africa,480,903,910,Eastern Africa
+MEX,Latin America and the Caribbean,484,904,916,Central America
+MNG,Asia,496,935,906,Eastern Asia
+MDA,Europe,498,908,923,Eastern Europe
+MNE,Europe,499,908,925,Southern Europe
+MAR,Africa,504,903,912,Northern Africa
+MOZ,Africa,508,903,910,Eastern Africa
+OMN,Asia,512,935,922,Western Asia
+NAM,Africa,516,903,913,Southern Africa
+NPL,Asia,524,935,5501,Southern Asia
+NLD,Europe,528,908,926,Western Europe
+CUW,Latin America and the Caribbean,531,904,915,Caribbean
+ABW,Latin America and the Caribbean,533,904,915,Caribbean
+NCL,Oceania,540,909,928,Melanesia
+VUT,Oceania,548,909,928,Melanesia
+NZL,Oceania,554,909,927,Australia/New Zealand
+NIC,Latin America and the Caribbean,558,904,916,Central America
+NER,Africa,562,903,914,Western Africa
+NGA,Africa,566,903,914,Western Africa
+NOR,Europe,578,908,924,Northern Europe
+FSM,Oceania,583,909,954,Micronesia
+PAK,Asia,586,935,5501,Southern Asia
+PAN,Latin America and the Caribbean,591,904,916,Central America
+PNG,Oceania,598,909,928,Melanesia
+PRY,Latin America and the Caribbean,600,904,931,South America
+PER,Latin America and the Caribbean,604,904,931,South America
+PHL,Asia,608,935,920,South-Eastern Asia
+POL,Europe,616,908,923,Eastern Europe
+PRT,Europe,620,908,925,Southern Europe
+GNB,Africa,624,903,914,Western Africa
+TLS,Asia,626,935,920,South-Eastern Asia
+PRI,Latin America and the Caribbean,630,904,915,Caribbean
+QAT,Asia,634,935,922,Western Asia
+REU,Africa,638,903,910,Eastern Africa
+ROU,Europe,642,908,923,Eastern Europe
+RUS,Europe,643,908,923,Eastern Europe
+RWA,Africa,646,903,910,Eastern Africa
+LCA,Latin America and the Caribbean,662,904,915,Caribbean
+VCT,Latin America and the Caribbean,670,904,915,Caribbean
+STP,Africa,678,903,911,Middle Africa
+SAU,Asia,682,935,922,Western Asia
+SEN,Africa,686,903,914,Western Africa
+SRB,Europe,688,908,925,Southern Europe
+SYC,Africa,690,903,910,Eastern Africa
+SLE,Africa,694,903,914,Western Africa
+SGP,Asia,702,935,920,South-Eastern Asia
+SVK,Europe,703,908,923,Eastern Europe
+VNM,Asia,704,935,920,South-Eastern Asia
+SVN,Europe,705,908,925,Southern Europe
+SOM,Africa,706,903,910,Eastern Africa
+ZAF,Africa,710,903,913,Southern Africa
+ZWE,Africa,716,903,910,Eastern Africa
+ESP,Europe,724,908,925,Southern Europe
+SSD,Africa,728,903,910,Eastern Africa
+SDN,Africa,729,903,912,Northern Africa
+ESH,Africa,732,903,912,Northern Africa
+SUR,Latin America and the Caribbean,740,904,931,South America
+SWZ,Africa,748,903,913,Southern Africa
+SWE,Europe,752,908,924,Northern Europe
+CHE,Europe,756,908,926,Western Europe
+SYR,Asia,760,935,922,Western Asia
+TJK,Asia,762,935,5500,Central Asia
+THA,Asia,764,935,920,South-Eastern Asia
+TGO,Africa,768,903,914,Western Africa
+TON,Oceania,776,909,957,Polynesia
+TTO,Latin America and the Caribbean,780,904,915,Caribbean
+ARE,Asia,784,935,922,Western Asia
+TUN,Africa,788,903,912,Northern Africa
+TUR,Asia,792,935,922,Western Asia
+TKM,Asia,795,935,5500,Central Asia
+UGA,Africa,800,903,910,Eastern Africa
+UKR,Europe,804,908,923,Eastern Europe
+MKD,Europe,807,908,925,Southern Europe
+EGY,Africa,818,903,912,Northern Africa
+GBR,Europe,826,908,924,Northern Europe
+CLI,Europe,830,908,924,Northern Europe
+TZA,Africa,834,903,910,Eastern Africa
+USA,Northern America,840,905,905,Northern America
+VIR,Latin America and the Caribbean,850,904,915,Caribbean
+BFA,Africa,854,903,914,Western Africa
+URY,Latin America and the Caribbean,858,904,931,South America
+UZB,Asia,860,935,5500,Central Asia
+VEN,Latin America and the Caribbean,862,904,931,South America
+WSM,Oceania,882,909,957,Polynesia
+YEM,Asia,887,935,922,Western Asia
+ZMB,Africa,894,903,910,Eastern Africa

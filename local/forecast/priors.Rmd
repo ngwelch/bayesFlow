@@ -1,0 +1,196 @@
+---
+pagetitle: "Forecast"
+output: bookdown::html_document2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=TRUE, autodep=TRUE,
+                      cache=FALSE, cache.path="./cache/", 
+                      fig.path="./figure/", dev="png",
+                      fig.align='center', fig.pos='H', comment=NULL)
+```
+
+```{r}
+library(kableExtra)
+library(data.table)
+library(magrittr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(cowplot)
+theme_set(theme_cowplot())
+library(nimble)
+library(MASS)
+```
+
+## DATA
+
+```{r}
+unlargest200 = fread("../data/200isoRegionCodes.csv")[order(iso)]
+
+isos = unlargest200[order(iso),iso]
+
+abelCohenTrain = 
+  fread(
+    file="../data/abelCohen2019flowsv6_flowdt.csv"
+    )[orig %in% isos & dest %in% isos][,`:=`(ac2019=flow, flow=NULL)][]
+
+
+azoseRaftery2019 = 
+  fread(
+    file="../data/azoseRaftery2019flows.csv"
+    )[,.(orig_code=origin,
+         dest_code=destination,
+         orig=origIso, 
+         dest=destIso, 
+         year0=year,
+         flow=migrantCount)][
+           orig %in% isos & dest %in% isos][,`:=`(ar2019=flow, flow=NULL)][]
+
+flowTrain = 
+  merge( abelCohenTrain, azoseRaftery2019, 
+         by=c("year0", "orig", "dest"), all=TRUE)[
+           ,.(flow=ifelse(is.na(ac2019), ar2019, ac2019)), 
+           by=.(year0, orig, dest)] %>%
+  merge( unique( azoseRaftery2019[,.(orig, dest, orig_code, dest_code)] ), 
+         by=c("orig", "dest"))
+
+
+# marginal flows
+marginflowTrain = 
+  merge(flowTrain[,.(inflow=sum(flow)), .(year0, iso=dest)], 
+        flowTrain[,.(outflow=sum(flow)), .(year0, iso=orig)], 
+        by=c("year0", "iso"))[,netflow:=inflow-outflow]
+
+periodTrain = flowTrain[, sort( unique( year0 ) ) ]
+
+nt = length( periodTrain )
+nc = length( isos )
+```
+
+
+```{r}
+# Population
+data("pop", package="wpp2019")
+data("popproj", package="wpp2019")
+
+wppHistoricPop = as.data.table(pop)
+wppProjectedPop = as.data.table(popproj)
+
+popdt = 
+  merge(wppHistoricPop, wppProjectedPop, by=c("name", "country_code")) %>%
+  merge(unlargest200, by="country_code")  %>%
+  setnames(old="name", new="country_name") %>%
+  setcolorder(c("area_code", "reg_code", "country_code", 
+                "area_name", "reg_name", "country_name", "iso"))
+
+popNames = c("iso", as.character(seq(1950, 2020, 5)))
+popIsodt = 
+  data.table::melt(popdt[,eval(popNames), with=FALSE], 
+       id.vars="iso", variable.name="year0", value.name="midPeriodPop000", 
+       variable.factor = FALSE)[,year0:=as.numeric(year0)][iso %in% isos][
+         ,`:=`(pop=midPeriodPop000*1e3, midPeriodPop000=NULL)
+       ][]
+
+```
+
+```{r}
+popflowTrain = merge(marginflowTrain, popIsodt)[
+  ,`:=`(netrate=netflow/(5*pop/1e3), 
+        outrate=outflow/(5*pop/1e3))]
+
+tmp = 
+  popflowTrain[,.(year0, iso, outrate)] %>%
+  data.table::dcast(iso ~ year0, value.var="outrate", fill=0)
+
+outrateTrain = 
+  tmp[,-"iso"] %>%
+  as.matrix() %>%
+  set_rownames(tmp$iso)
+
+
+tmp = 
+  marginflowTrain[,.(iso, year0, outflow)] %>% 
+  dcast(formula=iso~year0, value.var="outflow")
+
+outflowTrain = 
+  tmp[,-"iso"] %>%
+  as.matrix() %>%
+  set_rownames(tmp$iso)
+```
+
+## Inflow Variance Prior
+
+```{r}
+meanclrvar = meanclrsd = medianclrsd = medianclrvar = rep(0, 200) %>% set_names(isos)
+clrsd = c()
+for(o in isos){
+  origData = flowTrain[orig==o,.(dest, flow, year0)]
+
+  tmp = dcast(origData[,.(dest,flow, year0)], formula=dest~year0, value.var="flow")
+  flowMatrix = as.matrix( tmp[,-1]) %>% set_rownames(tmp$dest)
+  allPositiveFlows = apply( flowMatrix, 1, function(x) all(x>0) )
+  clr = apply( flowMatrix[allPositiveFlows,], 2, function(x) log( x / exp( 1/length(x) * sum( log(x) ) ) ) )
+  
+  sd.o = apply(clr, 1, sd)
+  
+  clrsd = c(clrsd, sd.o)
+  meanclrsd[o] = mean( sd.o )
+  medianclrsd[o] = median( sd.o )
+  
+  meanclrvar[o] = mean( apply(clr, 1, var) )
+  medianclrvar[o] = median( apply(clr, 1, var) )
+}
+```
+
+```{r}
+
+alpha = 0.025
+qs = quantile( meanclrsd, probs=c(alpha, 1-alpha) )
+ms = mean( meanclrsd )
+
+sprior = function(a) sum( abs( pbeta(c(qs[1], qs[2]), a, a*(1-ms)/ms) - c(alpha, 1-alpha) ) )
+pq = optimize( sprior, interval=c(0, 10) )
+
+p0=pq$minimum # 6.860981
+q0=p0*(1-ms)/ms # 3.058734
+
+samplePrior = rbeta(1e4, p0, q0)
+hist(samplePrior, prob=TRUE)
+lines(density(meanclrsd))
+
+hist(samplePrior**2, prob=TRUE)
+lines(density(meanclrsd**2))
+
+c(p0, q0)
+```
+
+
+## Outflow Variance Prior
+
+```{r}
+sobs = apply( log( outrateTrain ), 1, sd )
+
+alpha = 0.025
+qs = c(0.15, 0.99)# quantile( sobs, probs=c(alpha, 1-alpha) )
+ms = mean( sobs )
+
+sprior = function(a) sum( abs( pbeta(c(qs[1], qs[2]), a, a*(1-ms)/ms) - c(alpha, 1-alpha) ) )
+ab = optimize( sprior, interval=c(0, 20) )
+
+a0=ab$minimum # 5.318086
+b0=a0*(1-ms)/ms # 9.068054
+
+samplePrior = rbeta(1e4, a0, b0)
+hist(samplePrior, prob=TRUE)
+lines(density(sobs))
+
+hist(samplePrior**2, prob=TRUE)
+lines(density(sobs**2))
+
+c(a0, b0)
+```
+
+
+
+

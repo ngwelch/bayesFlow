@@ -1,0 +1,440 @@
+---
+title: "Heldout Summary"
+author: "Nathan Welch"
+date: "26 February 2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(bookdown)
+library(kableExtra)
+library(data.table)
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(cowplot)
+theme_set(theme_cowplot())
+library(scales)
+uwPurple = rgb(red=51, green=0, blue=111, maxColorValue=255)
+uwGold = rgb(red=232, green=211, blue=162, maxColorValue=255)
+uwMetallicGold = rgb(red=145, green=123, blue=76, maxColorValue=255)
+```
+
+```{r}
+load("results/pit.RData")
+unlargest200 = fread("../data/200isoRegionCodes.csv")[order(iso)]
+```
+
+```{r}
+flow = readRDS("results/flowPredict.rds")
+inflow = apply(flow, MARGIN=c("destination", "sample"), sum) %>% t()
+outflow = apply(flow, MARGIN=c("origin", "sample"), sum) %>% t()
+netflow = inflow - outflow
+```
+
+```{r}
+flowTrain = 
+  fread(file="../data/azoseRaftery2019flows.csv")[
+    ,.(year0=year, orig=origIso, dest=destIso, flow=migrantCount)]
+flowTest = fread(file="../data/abelCohen2019flowsv6_flowdt.csv")
+
+flowMarginTest = 
+  merge(flowTest[,.(inflow=sum(flow)), .(year0, iso=dest)], 
+        flowTest[,.(outflow=sum(flow)), .(year0, iso=orig)], 
+        by=c("year0", "iso"))[,netflow:=inflow-outflow]
+```
+
+```{r}
+
+predictdt = 
+  reshape2::melt(flow, value.name="flow") %>% 
+  as.data.table() %>% 
+  .[origin!=destination]
+
+inPredictdt = predictdt[,.(inPredict=sum(flow)), .(iso=destination, sample)]
+outPredict = predictdt[,.(outPredict=sum(flow)), .(iso=origin, sample)]
+countryPredictSampledt = 
+  merge(inPredictdt, outPredict, by=c("iso", "sample"))[,netPredict:=inPredict-outPredict]
+
+
+a = 0.025
+
+countryQuantiledt = 
+  countryPredictSampledt[,.(inBayes=median(inPredict),
+                            outBayes=median(outPredict),
+                            netBayes=median(netPredict),
+                            inLower=quantile(inPredict, a), 
+                            inUpper=quantile(inPredict, 1-a), 
+                            outLower=quantile(outPredict, a), 
+                            outUpper=quantile(outPredict, 1-a), 
+                            netLower=quantile(netPredict, a), 
+                            netUpper=quantile(netPredict, 1-a)), iso]
+
+flowPredictdt = 
+  predictdt[,.(lower=floor( quantile(flow, a) ), 
+               bayes=round( quantile(flow, 0.5) ), 
+               upper=ceiling( quantile(flow, 1-a) ) 
+               ), 
+            .(origin, destination)] %>% 
+  merge( flowTest[year0==2015][,.(origin=orig, destination=dest, obs=flow)],
+         by=c("origin", "destination"))
+
+in2015dt = flowTest[year0==2015][,.(in2015=sum(flow)), .(iso=dest)]
+out2015dt = flowTest[year0==2015][,.(out2015=sum(flow)), .(iso=orig)]
+country2015dt = merge(in2015dt, out2015dt, by="iso")[,net2015:=in2015 - out2015]
+
+predict2015dt = 
+  merge(countryQuantiledt, country2015dt, by="iso") %>%
+  merge(unlargest200, by="iso")
+
+(predict2015dt[,.(flowPI=flowPredictdt[,mean(lower<=obs & obs<=upper)],
+                  outPI=mean(outLower<=out2015 & out2015<=outUpper), 
+                  inPI=mean(inLower<=in2015 & in2015<=inUpper), 
+                  netPI=mean(netLower<=net2015 & net2015<=netUpper))]*100) %>% round()
+```
+
+
+## Country-Level Evaluation 
+
+```{r}
+# bayes
+bayesCountryMAE = 
+  merge( countryQuantiledt[,.(iso, inBayes, outBayes, netBayes)], 
+       country2015dt )[,.(inMAE=mean(abs(in2015-inBayes)), 
+                          outMAE=mean(abs(out2015-outBayes)), 
+                          netMAE=mean(abs(net2015-netBayes))
+                          )] %>% round()
+
+
+# mean
+meanFlow = 
+  merge(flowTrain[,.(flowbar=mean(flow)), .(orig, dest)], 
+        flowTest[year0==2015][,.(orig, dest, obs2015=flow)] )
+
+meanOut = meanFlow[,.(outBar=sum(flowbar)), .(iso=orig)]
+meanIn = meanFlow[,.(inBar=sum(flowbar)), .(iso=dest)]
+meanCountry = merge(meanOut, meanIn, by="iso")[,netBar:=inBar-outBar][]
+
+meanCountry2015dt = merge(country2015dt, meanCountry, by="iso")
+meanCountryMAE = 
+  meanCountry2015dt[,.(inMAE=mean(abs(in2015-inBar)), 
+                     outMAE=mean(abs(out2015-outBar)), 
+                     netMAE=mean(abs(net2015-netBar))
+                     )] %>% round()
+
+
+# persistance 
+persistFlow = 
+  merge(flowTrain[year0==2010, .(orig, dest, persist2010=flow)], 
+        flowTest[year0==2015][,.(orig, dest, obs2015=flow)] )
+
+persistOut = persistFlow[,.(outPersist=sum(persist2010)), .(iso=orig)]
+persistIn = persistFlow[,.(inPersist=sum(persist2010)), .(iso=dest)]
+persistCountry = 
+  merge(persistOut, persistIn, by="iso")[
+    ,netPersist:=inPersist-outPersist][]
+
+persistCountry2015dt = merge(country2015dt, persistCountry, by="iso")
+persistCountryMAE = 
+  persistCountry2015dt[,.(inMAE=mean(abs(in2015-inPersist)), 
+                        outMAE=mean(abs(out2015-outPersist)), 
+                        netMAE=mean(abs(net2015-netPersist))
+                     )] %>% round()
+```
+
+```{r}
+maeAlldt = 
+  data.table(
+    method=c("Bayes", "Mean", "Persist"), 
+    rbind("Bayes"=bayesCountryMAE, 
+          "Mean"=meanCountryMAE, 
+          "Persist"=persistCountryMAE))
+
+maeAlldt
+```
+
+## Flow Evaluation 
+
+```{r}
+bayesFlowQuantile = 
+  merge( predictdt[,.(bayes=median(flow), 
+                      bayesLower=quantile(flow, 0.1), 
+                      bayesUpper=quantile(flow, 0.9)),
+                   .(orig=origin, dest=destination)], 
+         flowTest[year0==2015][,.(orig, dest, obs2015=flow)]
+        )
+
+bayesFlowR2 = 
+  merge(bayesFlowQuantile[,.(orig, dest, bayes)],
+        meanFlow)[,1-sum((obs2015-bayes)**2)/(sum(obs2015-flowbar)**2)]
+
+bayesFlowR2
+```
+
+```{r}
+bayesFlowError = 
+  bayesFlowQuantile[,.(MAPE=100*mean(abs(bayes-obs2015)/(obs2015+1)), 
+                    MAE=mean(abs(bayes-obs2015))
+                    )] %>% round(1)
+
+meanFlowError = 
+  meanFlow[,.(MAPE=100*mean(abs(flowbar-obs2015)/(obs2015+1)), 
+              MAE=mean(abs(flowbar-obs2015))
+              )] %>% round(1)
+
+persistFlowError = 
+  persistFlow[,.(MAPE=100*mean(abs(obs2015-persist2010)/(obs2015+1)), 
+                 MAE=mean(abs(obs2015-persist2010))
+                 )] %>% round(1)
+
+
+flowErrordt = 
+  data.table(
+    method=c("Bayes", "Mean", "Persist"), 
+    rbind("Bayes"=bayesFlowError, 
+          "Mean"=meanFlowError, 
+          "Persist"=persistFlowError))
+
+flowErrordt
+```
+
+```{r}
+
+bayesScatterPlot =
+  ggplot() + 
+  geom_abline(intercept=0, slope=1, linetype="dashed", col="grey") + 
+  geom_point(data=bayesFlowQuantile, aes(x=bayes, y=obs2015), col=uwPurple, alpha=0.3) + 
+  # geom_segment(data=bayesFlowQuantile, 
+  #              aes(x=obs2015, xend=obs2015, y=bayesUpper, yend=bayesLower, col="BHM"),
+  #              alpha=0.25) +
+  #geom_point(data=meanFlow, aes(x=obs2015, y=flowbar, col="Mean"), alpha=0.5) + 
+  #geom_point(data=persistFlow, aes(x=obs2015, y=persist2010, col="Persistence"),
+  #            alpha=0.5) + 
+  geom_text(data=bayesFlowQuantile[abs(bayes-obs2015)>1e5], 
+             aes(x=bayes, y=obs2015, label=paste0(orig, "-", dest)), 
+             size=2.5, check_overlap=TRUE, nudge_x=2e5, nudge_y=1e5) + 
+  scale_y_continuous(labels=unit_format(accuracy=1, unit="M", scale=1e-6, sep="")) + 
+  scale_x_continuous(labels = unit_format(accuracy=1, unit="M", scale=1e-6, sep="")) +
+  ylab("Observed Flow") + 
+  xlab(expression(atop("Predicted Flow", bold("(a)") ) ) ) +
+  coord_cartesian(xlim=c(-5e4, 3e6)) +
+  theme(legend.pos="none") +
+  annotate("text", x=2.75e6, y=2.95e6,label="y = x") + 
+  annotate("text", x=1e6, y=2.95e6,
+           label="paste(italic(R) ^ 2, \" = 0.97\")",parse=TRUE, size=3.5 ) + 
+  theme(legend.title=element_blank(), 
+        legend.position="none", 
+        axis.text.x=element_text(size=7),
+        axis.text.y=element_text(size=7),
+        axis.title.x=element_text(size=8),
+        axis.title.y=element_text(size=8),
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0))
+
+# ggsave(filename="bayesScatter.png",
+#        plot=bayesScatterPlot,
+#        width=3, height=3, units="in",
+#        path="../manuscript/figure/")
+
+# ggsave(filename="bayesScatter.png", 
+#        plot=bayesScatterPlot, 
+#        width=5, height=5, units="in",
+#        path="results/out_of_sample/")
+# 
+# ggsave(filename="bayesScatter.png", 
+#        plot=bayesScatterPlot, 
+#        width=3, height=3, units="in",
+#        path="../../2021_05_05_paa/figure/")
+
+bayesScatterPlot
+```
+
+```{r, eval=FALSE}
+
+bayesScatter = 
+  bayesScatterPlot + xlab("Predicted Flow")
+
+ggsave(
+  filename="flowScatterPlot.pdf",
+  plot=bayesScatter,
+  width=3.25, height=2.5, units="in",
+  path="../submission/")
+
+```
+
+```{r}
+tmp = predict2015dt[,.(iso, in2015, inBayes, 
+                       AE=abs(in2015-inBayes)/1e6, Area=area_name, 
+                       dodgeleft=inBayes>in2015)]
+
+inflowScatter = 
+  ggplot(data=tmp) +
+  geom_abline(intercept=0, slope=1, col="grey", linetype="dashed") +
+  geom_point(aes(x=inBayes, y=in2015, col=Area, size=AE), alpha=0.75) +
+  geom_text( data=tmp[order(-AE)][1:10][dodgeleft==TRUE], 
+             aes(x=inBayes, y=in2015, label=iso),
+             size=2.5, check_overlap=TRUE, nudge_x=1e5, nudge_y=-8e5) + 
+  geom_text( data=tmp[order(-AE)][1:10][dodgeleft==FALSE], 
+             aes(x=inBayes, y=in2015, label=iso),
+             size=2.5, check_overlap=TRUE, nudge_x=1e5, nudge_y=8e5) + 
+  annotate("text", x=14e6, y=15e6,label="y = x") + 
+  xlab( expression(atop("Predicted Inflow", bold("(b)") ) )  ) +
+  ylab( "Observed Inflow" ) + 
+  scale_size(breaks=seq(0,4,1), limits=c(0,5)) +
+  labs(col="", size="Absolute Error in Millions of People:") +
+  scale_y_continuous(labels = unit_format(accuracy=1, unit="M", scale=1e-6, sep="")) +
+  scale_x_continuous(labels = unit_format(accuracy=1, unit="M", scale=1e-6, sep="")) + 
+  coord_cartesian(xlim=c(-5e4, 14e6)) +
+  theme(legend.text=element_text(size=10), 
+        legend.title = element_text(size=10),
+        legend.box="vertical", 
+        legend.margin=margin(), 
+        legend.position="top", 
+        legend.justification="center",
+        axis.text.x=element_text(size=7),
+        axis.text.y=element_text(size=7),
+        axis.title.x=element_text(size=8),
+        axis.title.y=element_text(size=8),
+        plot.margin=margin(0,0,0,0)) 
+
+inflowScatter
+```
+```{r}
+tmp = predict2015dt[,.(iso, out2015, outBayes, 
+                       AE=abs(out2015-outBayes)/1e6, Area=area_name, 
+                       dodgeleft=outBayes>out2015)]
+
+outflowScatter = 
+  ggplot(data=tmp) +
+  geom_abline(intercept=0, slope=1, col="grey", linetype="dashed") +
+  geom_point(aes(x=outBayes, y=out2015, col=Area, size=AE), alpha=0.75) +
+  geom_text( data=tmp[order(-AE)][1:10][dodgeleft==TRUE], 
+             aes(x=outBayes, y=out2015, label=iso),
+             size=2.5, check_overlap=TRUE, nudge_x=1e5, nudge_y=-8e5) + 
+  geom_text( data=tmp[order(-AE)][1:10][dodgeleft==FALSE], 
+             aes(x=outBayes, y=out2015, label=iso),
+             size=2.5, check_overlap=TRUE, nudge_x=1e5, nudge_y=8e5) + 
+  xlab( expression(atop("Predicted Outflow", bold("(c)") ) ) ) +
+  ylab("Observed Outflow") + 
+  annotate("text", x=14e6, y=15e6,label="y = x") + 
+  scale_size(breaks=seq(0,4,1), limits=c(0,5)) +
+  labs(col="", size="Absolute Error") +
+  scale_y_continuous(labels = unit_format(accuracy=1, unit="M", scale=1e-6, sep="")) +
+  scale_x_continuous(labels = unit_format(accuracy=1, unit="M", scale=1e-6, sep="")) + 
+  coord_cartesian(xlim=c(-5e4, 14e6)) +
+  theme(legend.title=element_blank(), 
+        legend.position="none", 
+        axis.text.x=element_text(size=7),
+        axis.text.y=element_text(size=7),
+        axis.title.x=element_text(size=8),
+        axis.title.y=element_text(size=8),
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0))
+
+
+outflowScatter
+```
+
+```{r}
+
+tmp = predict2015dt[,.(iso, net2015, netBayes, 
+                       AE=abs(net2015-netBayes)/1e6, Area=area_name, 
+                       dodgeleft=netBayes>net2015)]
+
+netflowScatter = 
+  ggplot(data=tmp) +
+  geom_abline(intercept=0, slope=1, col="grey", linetype="dashed") +
+  geom_point(aes(x=netBayes, y=net2015, col=Area, size=AE), alpha=0.75) +
+  geom_text( data=tmp[order(-AE)][1:10][dodgeleft==FALSE], 
+             aes(x=netBayes, y=net2015, label=iso),
+             size=2.5, check_overlap=TRUE, nudge_x=0, nudge_y=10e5) + 
+  geom_text( data=tmp[order(-AE)][1:10][dodgeleft==TRUE], 
+             aes(x=netBayes, y=net2015, label=iso),
+             size=2.5, check_overlap=TRUE, nudge_x=0, nudge_y=-10e5) + 
+  annotate("text", x=9e6, y=10e6,label="y = x") + 
+  xlab( expression(atop("Predicted Net Flow", bold("(d)") ) )) +
+  ylab( "Observed Net Flow" ) + 
+  scale_size(breaks=seq(0,4,1), limits=c(0,5)) +
+  labs(col="", size="Absolute Error") +
+  scale_y_continuous(labels = unit_format(accuracy=1, unit="M", scale=1e-6, sep="")) +
+  scale_x_continuous(labels = unit_format(accuracy=1, unit="M", scale=1e-6, sep="")) + 
+  theme(legend.title=element_blank(), 
+        legend.position="none", 
+        axis.text.x=element_text(size=7),
+        axis.text.y=element_text(size=7),
+        axis.title.x=element_text(size=8),
+        axis.title.y=element_text(size=8),
+        legend.justification="center", 
+        plot.margin=margin(0,0,0,0))
+
+# ggsave(filename="netflowScatter.png", 
+#        plot=netflowScatter, 
+#        width=3, height=3, units="in",
+#        path="../../2021_05_05_paa/figure/")
+
+
+netflowScatter
+```
+
+
+```{r message=FALSE, error=FALSE, warning=FALSE}
+thisLegend = get_legend( inflowScatter )
+
+thesePlots = 
+  plot_grid(inflowScatter + 
+              theme(legend.position="none") + 
+              coord_cartesian(xlim=c(0,15e6), ylim=c(0,15e6)),
+            outflowScatter+ 
+              theme(legend.position="none") + 
+              coord_cartesian(xlim=c(0,15e6), ylim=c(0,15e6)),
+            netflowScatter+ 
+              theme(legend.position="none") + 
+              coord_cartesian(xlim=c(-10e6,10e6), ylim=c(-10e6,10e6)), 
+            align="hv", nrow=1)
+
+thesePlots = plot_grid(bayesScatterPlot, thesePlots, rel_widths=c(0.25, 0.75))
+
+combinedMarginScatterPlots = 
+  plot_grid(legend=thisLegend,
+            thesePlots, ncol=1, rel_heights=c(0.25, 0.85)) #(25, 75)
+
+combinedMarginScatterPlots
+```
+
+```{r}
+ggsave(
+  filename="combinedMarginScatterPlots.pdf",
+  plot=combinedMarginScatterPlots,
+  width=9, height=3.5, units="in",
+  path="../submission/")
+```
+
+
+```{r}
+thisLegend = get_legend( inflowScatter )
+
+thesePlots = 
+  plot_grid(inflowScatter + 
+              theme(legend.position="none") + 
+              coord_cartesian(xlim=c(0,15e6), ylim=c(0,15e6)) + 
+              xlab("Predicted Inflow"),
+            outflowScatter+ 
+              theme(legend.position="none") + 
+              coord_cartesian(xlim=c(0,15e6), ylim=c(0,15e6)) +
+              xlab("Predicted Outflow"),
+            netflowScatter+ 
+              theme(legend.position="none") + 
+              coord_cartesian(xlim=c(-10e6,10e6), ylim=c(-10e6,10e6)) + 
+              xlab("Predicted Net Flow"), 
+            align="hv", nrow=1)
+
+combinedMarginScatterPlots = 
+  plot_grid(legend=thisLegend,
+            thesePlots, ncol=1, rel_heights=c(0.25, 0.85)) #(25, 75)
+
+combinedMarginScatterPlots
+```
