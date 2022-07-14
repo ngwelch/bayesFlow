@@ -4,7 +4,7 @@ There are several steps to replicating the flow forecasting results.
 This directory is organized as follows:
 
 	- bayesPop: source codes and data for the bayesPop project
-	- bayesPop.output: population forecasts based on migration flow model
+	- [not tracked] bayesPop.output: population forecasts based on migration flow model
 	- data: data needed to generate migration adjusted population forecasts
 	- [not tracked] forecast: posterior parameter samples using the most updated WPP and estimated flows
 	- [not tracked] heldout: posterior parameter samples using data as of WPP 2015 release
