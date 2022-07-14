@@ -6,10 +6,10 @@ This directory is organized as follows:
 	- bayesPop: source codes and data for the bayesPop project
 	- bayesPop.output: population forecasts based on migration flow model
 	- data: data needed to generate migration adjusted population forecasts
-	- forecast: posterior parameter samples using the most updated WPP and estimated flows
-	- heldout: posterior parameter samples using data as of WPP 2015 release
-	- lib: local R libraries
-	- log: sampler log files
+	- [not tracked] forecast: posterior parameter samples using the most updated WPP and estimated flows
+	- [not tracked] heldout: posterior parameter samples using data as of WPP 2015 release
+	- [not tracked] lib: local R libraries
+	- [not tracked] log: sampler log files
 	- README.md: this file
 	- src: all flow forecasting codes organized by SLURM job and function, e.g. inflow_heldout.sbatch runs inflow_heldout.R.
 
@@ -20,7 +20,7 @@ The heldout analysis is executed in a series of steps:
 		sbatch src/outflow.sbatch
 	2) Fit the inflow model component. This script executes 200 parallel jobs. 
 		sbatch src/inflow_heldout.sbatch
-	3) Combine the results from 1-2 and summarize the fit quality. Note that SDN is used as a proxy for SDN preferences.
+	3) Combine the results from 1-2 and summarize the fit quality. Note that SDN is used as a proxy for SSD preferences.
 		sbatch src/heldout.sbatch
 
 Codes to generate forecasts also reside in src.

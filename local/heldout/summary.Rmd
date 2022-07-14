@@ -371,11 +371,6 @@ netflowScatter =
         legend.justification="center", 
         plot.margin=margin(0,0,0,0))
 
-# ggsave(filename="netflowScatter.png", 
-#        plot=netflowScatter, 
-#        width=3, height=3, units="in",
-#        path="../../2021_05_05_paa/figure/")
-
 
 netflowScatter
 ```

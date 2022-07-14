@@ -45,8 +45,6 @@ library(ggplot2)
 library(cowplot)
 theme_set(theme_cowplot())
 library(scales)
-
-forecastVersion = "v15"
 ```
 
 # Data Model
@@ -170,7 +168,7 @@ asrMigPop90 = fread(file="welchRaftery2022revisionASR2016.csv")
 
 ```{r}
 flowPost = 
-  fread(file=file.path(forecastVersion, "flowPost.csv") ) %>%
+  fread(file=file.path("results", "flowPost.csv") ) %>%
   merge(unlargest200[,.(origin=country_code, orig=iso)], by="origin") %>%
   merge(unlargest200[,.(destination=country_code, dest=iso)], by="destination") %>%
   .[,`:=`(origin=NULL, destination=NULL)] %>%
@@ -204,7 +202,7 @@ pop.last = Reduce("merge", list(popf.last, popm.last, popt.last) )
 
 
 countryPopPost = 
-  fread(file=file.path(forecastVersion, "countryPost.csv") ) %>%
+  fread(file=file.path("results", "countryPost.csv") ) %>%
   merge(unlargest200[,.(country_code, iso)], by="country_code") %>%
   .[,country_code:=NULL] %>%
   .[,lapply(.SD, function(x) round(x)),.(iso, year)] %>%
@@ -214,7 +212,7 @@ countryPopPost =
 
 ```{r}
 countryPopAgePost = 
-  fread(file=file.path(forecastVersion, "countryAgePost.csv") ) %>%
+  fread(file=file.path("results", "countryAgePost.csv") ) %>%
   merge(unlargest200[,.(country_code, iso)], by="country_code") %>%
   .[,country_code:=NULL] %>%
   .[,lapply(.SD, function(x) round(x)),.(iso, year, age)] 
@@ -222,7 +220,7 @@ countryPopAgePost =
 
 ```{r}
 flowMarginPost = 
-  fread(file=file.path(forecastVersion, "flowMarginPost.csv") )  %>%
+  fread(file=file.path("results", "flowMarginPost.csv") )  %>%
   merge(unlargest200[,.(country_code, iso)], by="country_code") %>%
   .[,country_code:=NULL] %>%
   .[,lapply(.SD, round),.(iso, year)] %>%
@@ -267,11 +265,11 @@ smoothResults = function(year, lower, middle, upper, skip=0, spar=0.75){
 
 if(plotAll){
   plotIsos = unlargest200$iso
-  pdf(file.path( forecastVersion, "forecast_plots.pdf") )
+  pdf(file.path( "results", "forecast_plots.pdf") )
 } else {
   plotIsos = c("ABW", "BRA", "CAN", "CHN","DEU", "DNK", "ESP", "FRA", "GBR", "IDN", "IND", 
                 "ITA", "MDG", "NLD", "PRT", "QAT", "SGP", "SWE", "USA", "ZAF", "ZWE")
-  pdf(file.path( forecastVersion, "forecast_sample.pdf") )
+  pdf(file.path( "results", "forecast_sample.pdf") )
 }
 
 cols = c("Observed"="black", 
@@ -887,7 +885,7 @@ globalFlowObserved =
          popIsodt[,.(globe.pop=sum(pop)), year0], by="year0")[,year:=year0+3]
   
 globalFlowForecast = 
-  fread(file=file.path(forecastVersion, "globalMigrationPost.csv"))[
+  fread(file=file.path("results", "globalMigrationPost.csv"))[
     ,.(year, q05=q05cnt, q10=q10cnt, q50=q50cnt, q90=q90cnt, q95=q95cnt)] %>%
   rbind(globalFlowObserved[year==2018, 
                            .(year, 
@@ -905,7 +903,7 @@ globalPercentObserved =
   globalFlowObserved[,.(year0, pctMig=100*globe.flow/globe.pop)]
 
 globalPercentForecast = 
-  fread(file=file.path(forecastVersion, "globalMigrationPost.csv"))[
+  fread(file=file.path("results", "globalMigrationPost.csv"))[
     ,.(year, q05=q05pct, q10=q10cnt, q50=q50pct, q90=q90pct, q95=q95pct)] %>%
   rbind(globalPercentObserved[year0==2015][
     ,.(year=2018, q05=pctMig, q10=pctMig, q50=pctMig, q90=pctMig, q95=pctMig)]) %>%
@@ -1038,7 +1036,7 @@ c("count_increase"=percentIncreaseCount,
 
 ```{r, eval=FALSE}
 
-pdf( file.path( forecastVersion, "flow_forecast_plots.pdf") )
+pdf( file.path( "results", "flow_forecast_plots.pdf") )
 
 cols = c("Forecast"="blue", 
          "WPP"="red", 
@@ -1113,7 +1111,7 @@ dev.off()
 
 ```{r, eval=FALSE}
 
-pdf( file.path( forecastVersion, "germany_forecast_plots.pdf") )
+pdf( file.path( "results", "germany_forecast_plots.pdf") )
 
 cols = c("Forecast"="blue", 
          "WPP"="red", 
@@ -1194,7 +1192,7 @@ dev.off()
 
 ```{r, eval=FALSE}
 
-pdf( file.path( forecastVersion, "venezuela_forecast_plots.pdf") )
+pdf( file.path( "results", "venezuela_forecast_plots.pdf") )
 
 cols = c("Forecast"="blue", 
          "WPP"="red", 
@@ -1279,6 +1277,6 @@ flowPostSI = flowPost[year!=2018][,.(orig, dest, year0=year-3,
                                      quantile05=floor(q05), 
                                      quantile50=round(q50), 
                                      quantile95=ceiling(q95))]
-fwrite(flowPostSI, file=file.path( forecastVersion, "forecast_quantiles.csv"))
+fwrite(flowPostSI, file=file.path( "results", "forecast_quantiles.csv"))
 ```
 
