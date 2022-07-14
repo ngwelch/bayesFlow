@@ -1,0 +1,5 @@
+.DS_Store
+cluster/src/.DS_Store
+local/.DS_Store
+local/*/.DS_Store
+
