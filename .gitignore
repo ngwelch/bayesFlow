@@ -2,4 +2,7 @@
 cluster/src/.DS_Store
 local/.DS_Store
 local/*/.DS_Store
-
+cluster/forecast
+cluster/heldout
+cluster/lib
+cluster/log
